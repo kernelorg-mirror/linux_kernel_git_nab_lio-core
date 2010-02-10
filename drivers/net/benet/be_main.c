@@ -31,8 +31,10 @@ MODULE_PARM_DESC(rx_frag_size, "Size of a fragment that holds rcvd data.");
 
 static DEFINE_PCI_DEVICE_TABLE(be_dev_ids) = {
 	{ PCI_DEVICE(BE_VENDOR_ID, BE_DEVICE_ID1) },
+	{ PCI_DEVICE(BE_VENDOR_ID, BE_DEVICE_ID2) },
 	{ PCI_DEVICE(BE_VENDOR_ID, OC_DEVICE_ID1) },
 	{ PCI_DEVICE(BE_VENDOR_ID, OC_DEVICE_ID2) },
+	{ PCI_DEVICE(BE_VENDOR_ID, OC_DEVICE_ID3) },
 	{ 0 }
 };
 MODULE_DEVICE_TABLE(pci, be_dev_ids);
@@ -1610,28 +1612,41 @@ static int be_open(struct net_device *netdev)
 
 	status = be_cmd_link_status_query(adapter, &link_up);
 	if (status)
-		return status;
+		goto ret_sts;
 	be_link_status_update(adapter, link_up);
 
+	status = be_vid_config(adapter);
+	if (status)
+		goto ret_sts;
+
+	status = be_cmd_set_flow_control(adapter,
+					adapter->tx_fc, adapter->rx_fc);
+	if (status)
+		goto ret_sts;
+
 	schedule_delayed_work(&adapter->work, msecs_to_jiffies(100));
-	return 0;
+ret_sts:
+	return status;
 }
 
 static int be_setup(struct be_adapter *adapter)
 {
 	struct net_device *netdev = adapter->netdev;
-	u32 if_flags;
+	u32 cap_flags, en_flags;
 	int status;
 
-	if_flags = BE_IF_FLAGS_BROADCAST | BE_IF_FLAGS_PROMISCUOUS |
-		BE_IF_FLAGS_MCAST_PROMISCUOUS | BE_IF_FLAGS_UNTAGGED |
-		BE_IF_FLAGS_PASS_L3L4_ERRORS;
-	status = be_cmd_if_create(adapter, if_flags, netdev->dev_addr,
-			false/* pmac_invalid */, &adapter->if_handle,
-			&adapter->pmac_id);
+	cap_flags = BE_IF_FLAGS_UNTAGGED | BE_IF_FLAGS_BROADCAST |
+			BE_IF_FLAGS_MCAST_PROMISCUOUS |
+			BE_IF_FLAGS_PROMISCUOUS |
+			BE_IF_FLAGS_PASS_L3L4_ERRORS;
+	en_flags = BE_IF_FLAGS_UNTAGGED | BE_IF_FLAGS_BROADCAST |
+			BE_IF_FLAGS_PASS_L3L4_ERRORS;
+
+	status = be_cmd_if_create(adapter, cap_flags, en_flags,
+			netdev->dev_addr, false/* pmac_invalid */,
+			&adapter->if_handle, &adapter->pmac_id);
 	if (status != 0)
 		goto do_none;
-
 
 	status = be_tx_queues_create(adapter);
 	if (status != 0)
@@ -1645,17 +1660,8 @@ static int be_setup(struct be_adapter *adapter)
 	if (status != 0)
 		goto rx_qs_destroy;
 
-	status = be_vid_config(adapter);
-	if (status != 0)
-		goto mccqs_destroy;
-
-	status = be_cmd_set_flow_control(adapter, true, true);
-	if (status != 0)
-		goto mccqs_destroy;
 	return 0;
 
-mccqs_destroy:
-	be_mcc_queues_destroy(adapter);
 rx_qs_destroy:
 	be_rx_queues_destroy(adapter);
 tx_qs_destroy:
@@ -1906,6 +1912,10 @@ static void be_netdev_init(struct net_device *netdev)
 
 	adapter->rx_csum = true;
 
+	/* Default settings for Rx and Tx flow control */
+	adapter->rx_fc = true;
+	adapter->tx_fc = true;
+
 	netif_set_gso_max_size(netdev, 65535);
 
 	BE_SET_NETDEV_OPS(netdev, &be_netdev_ops);
@@ -1934,6 +1944,7 @@ static void be_unmap_pci_bars(struct be_adapter *adapter)
 static int be_map_pci_bars(struct be_adapter *adapter)
 {
 	u8 __iomem *addr;
+	int pcicfg_reg;
 
 	addr = ioremap_nocache(pci_resource_start(adapter->pdev, 2),
 			pci_resource_len(adapter->pdev, 2));
@@ -1947,8 +1958,13 @@ static int be_map_pci_bars(struct be_adapter *adapter)
 		goto pci_map_err;
 	adapter->db = addr;
 
-	addr = ioremap_nocache(pci_resource_start(adapter->pdev, 1),
-			pci_resource_len(adapter->pdev, 1));
+	if (adapter->generation == BE_GEN2)
+		pcicfg_reg = 1;
+	else
+		pcicfg_reg = 0;
+
+	addr = ioremap_nocache(pci_resource_start(adapter->pdev, pcicfg_reg),
+			pci_resource_len(adapter->pdev, pcicfg_reg));
 	if (addr == NULL)
 		goto pci_map_err;
 	adapter->pcicfg = addr;
@@ -2018,6 +2034,7 @@ static int be_stats_init(struct be_adapter *adapter)
 	cmd->va = pci_alloc_consistent(adapter->pdev, cmd->size, &cmd->dma);
 	if (cmd->va == NULL)
 		return -1;
+	memset(cmd->va, 0, cmd->size);
 	return 0;
 }
 
@@ -2055,6 +2072,10 @@ static int be_hw_up(struct be_adapter *adapter)
 	if (status)
 		return status;
 
+	status = be_cmd_reset_function(adapter);
+	if (status)
+		return status;
+
 	status = be_cmd_get_fw_ver(adapter, adapter->fw_ver);
 	if (status)
 		return status;
@@ -2087,6 +2108,20 @@ static int __devinit be_probe(struct pci_dev *pdev,
 		goto rel_reg;
 	}
 	adapter = netdev_priv(netdev);
+
+	switch (pdev->device) {
+	case BE_DEVICE_ID1:
+	case OC_DEVICE_ID1:
+		adapter->generation = BE_GEN2;
+		break;
+	case BE_DEVICE_ID2:
+	case OC_DEVICE_ID2:
+		adapter->generation = BE_GEN3;
+		break;
+	default:
+		adapter->generation = 0;
+	}
+
 	adapter->pdev = pdev;
 	pci_set_drvdata(pdev, adapter);
 	adapter->netdev = netdev;
@@ -2107,10 +2142,6 @@ static int __devinit be_probe(struct pci_dev *pdev,
 	status = be_ctrl_init(adapter);
 	if (status)
 		goto free_netdev;
-
-	status = be_cmd_reset_function(adapter);
-	if (status)
-		goto ctrl_clean;
 
 	status = be_stats_init(adapter);
 	if (status)
@@ -2168,6 +2199,7 @@ static int be_suspend(struct pci_dev *pdev, pm_message_t state)
 		be_close(netdev);
 		rtnl_unlock();
 	}
+	be_cmd_get_flow_control(adapter, &adapter->tx_fc, &adapter->rx_fc);
 	be_clear(adapter);
 
 	pci_save_state(pdev);

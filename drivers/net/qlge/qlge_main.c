@@ -3310,10 +3310,8 @@ static int ql_adapter_initialize(struct ql_adapter *qdev)
 
 	/* Initialize the port and set the max framesize. */
 	status = qdev->nic_ops->port_initialize(qdev);
-       if (status) {
-              QPRINTK(qdev, IFUP, ERR, "Failed to start port.\n");
-              return status;
-       }
+	if (status)
+		QPRINTK(qdev, IFUP, ERR, "Failed to start port.\n");
 
 	/* Set up the MAC address and frame routing filter. */
 	status = ql_cam_route_initialize(qdev);
@@ -3714,9 +3712,6 @@ static int qlge_set_mac_address(struct net_device *ndev, void *p)
 	struct sockaddr *addr = p;
 	int status;
 
-	if (netif_running(ndev))
-		return -EBUSY;
-
 	if (!is_valid_ether_addr(addr->sa_data))
 		return -EADDRNOTAVAIL;
 	memcpy(ndev->dev_addr, addr->sa_data, ndev->addr_len);
@@ -3868,8 +3863,7 @@ static int __devinit ql_init_device(struct pci_dev *pdev,
 				    struct net_device *ndev, int cards_found)
 {
 	struct ql_adapter *qdev = netdev_priv(ndev);
-	int pos, err = 0;
-	u16 val16;
+	int err = 0;
 
 	memset((void *)qdev, 0, sizeof(*qdev));
 	err = pci_enable_device(pdev);
@@ -3881,18 +3875,12 @@ static int __devinit ql_init_device(struct pci_dev *pdev,
 	qdev->ndev = ndev;
 	qdev->pdev = pdev;
 	pci_set_drvdata(pdev, ndev);
-	pos = pci_find_capability(pdev, PCI_CAP_ID_EXP);
-	if (pos <= 0) {
-		dev_err(&pdev->dev, PFX "Cannot find PCI Express capability, "
-			"aborting.\n");
-		return pos;
-	} else {
-		pci_read_config_word(pdev, pos + PCI_EXP_DEVCTL, &val16);
-		val16 &= ~PCI_EXP_DEVCTL_NOSNOOP_EN;
-		val16 |= (PCI_EXP_DEVCTL_CERE |
-			  PCI_EXP_DEVCTL_NFERE |
-			  PCI_EXP_DEVCTL_FERE | PCI_EXP_DEVCTL_URRE);
-		pci_write_config_word(pdev, pos + PCI_EXP_DEVCTL, val16);
+
+	/* Set PCIe read request size */
+	err = pcie_set_readrq(pdev, 4096);
+	if (err) {
+		dev_err(&pdev->dev, "Set readrq failed.\n");
+		goto err_out;
 	}
 
 	err = pci_request_regions(pdev, DRV_NAME);
@@ -3916,6 +3904,9 @@ static int __devinit ql_init_device(struct pci_dev *pdev,
 		goto err_out;
 	}
 
+	/* Set PCIe reset type for EEH to fundamental. */
+	pdev->needs_freset = 1;
+	pci_save_state(pdev);
 	qdev->reg_base =
 	    ioremap_nocache(pci_resource_start(pdev, 1),
 			    pci_resource_len(pdev, 1));
@@ -4070,6 +4061,33 @@ static void __devexit qlge_remove(struct pci_dev *pdev)
 	free_netdev(ndev);
 }
 
+/* Clean up resources without touching hardware. */
+static void ql_eeh_close(struct net_device *ndev)
+{
+	int i;
+	struct ql_adapter *qdev = netdev_priv(ndev);
+
+	if (netif_carrier_ok(ndev)) {
+		netif_carrier_off(ndev);
+		netif_stop_queue(ndev);
+	}
+
+	if (test_bit(QL_ADAPTER_UP, &qdev->flags))
+		cancel_delayed_work_sync(&qdev->asic_reset_work);
+	cancel_delayed_work_sync(&qdev->mpi_reset_work);
+	cancel_delayed_work_sync(&qdev->mpi_work);
+	cancel_delayed_work_sync(&qdev->mpi_idc_work);
+	cancel_delayed_work_sync(&qdev->mpi_port_cfg_work);
+
+	for (i = 0; i < qdev->rss_ring_count; i++)
+		netif_napi_del(&qdev->rx_ring[i].napi);
+
+	clear_bit(QL_ADAPTER_UP, &qdev->flags);
+	ql_tx_ring_clean(qdev);
+	ql_free_rx_buffers(qdev);
+	ql_release_adapter_resources(qdev);
+}
+
 /*
  * This callback is called by the PCI subsystem whenever
  * a PCI bus error is detected.
@@ -4078,17 +4096,21 @@ static pci_ers_result_t qlge_io_error_detected(struct pci_dev *pdev,
 					       enum pci_channel_state state)
 {
 	struct net_device *ndev = pci_get_drvdata(pdev);
-	struct ql_adapter *qdev = netdev_priv(ndev);
 
-	netif_device_detach(ndev);
-
-	if (state == pci_channel_io_perm_failure)
+	switch (state) {
+	case pci_channel_io_normal:
+		return PCI_ERS_RESULT_CAN_RECOVER;
+	case pci_channel_io_frozen:
+		netif_device_detach(ndev);
+		if (netif_running(ndev))
+			ql_eeh_close(ndev);
+		pci_disable_device(pdev);
+		return PCI_ERS_RESULT_NEED_RESET;
+	case pci_channel_io_perm_failure:
+		dev_err(&pdev->dev,
+			"%s: pci_channel_io_perm_failure.\n", __func__);
 		return PCI_ERS_RESULT_DISCONNECT;
-
-	if (netif_running(ndev))
-		ql_adapter_down(qdev);
-
-	pci_disable_device(pdev);
+	}
 
 	/* Request a slot reset. */
 	return PCI_ERS_RESULT_NEED_RESET;
@@ -4105,25 +4127,15 @@ static pci_ers_result_t qlge_io_slot_reset(struct pci_dev *pdev)
 	struct net_device *ndev = pci_get_drvdata(pdev);
 	struct ql_adapter *qdev = netdev_priv(ndev);
 
+	pdev->error_state = pci_channel_io_normal;
+
+	pci_restore_state(pdev);
 	if (pci_enable_device(pdev)) {
 		QPRINTK(qdev, IFUP, ERR,
 			"Cannot re-enable PCI device after reset.\n");
 		return PCI_ERS_RESULT_DISCONNECT;
 	}
-
 	pci_set_master(pdev);
-
-	netif_carrier_off(ndev);
-	ql_adapter_reset(qdev);
-
-	/* Make sure the EEPROM is good */
-	memcpy(ndev->perm_addr, ndev->dev_addr, ndev->addr_len);
-
-	if (!is_valid_ether_addr(ndev->perm_addr)) {
-		QPRINTK(qdev, IFUP, ERR, "After reset, invalid MAC address.\n");
-		return PCI_ERS_RESULT_DISCONNECT;
-	}
-
 	return PCI_ERS_RESULT_RECOVERED;
 }
 
@@ -4131,17 +4143,21 @@ static void qlge_io_resume(struct pci_dev *pdev)
 {
 	struct net_device *ndev = pci_get_drvdata(pdev);
 	struct ql_adapter *qdev = netdev_priv(ndev);
+	int err = 0;
 
-	pci_set_master(pdev);
-
+	if (ql_adapter_reset(qdev))
+		QPRINTK(qdev, DRV, ERR, "reset FAILED!\n");
 	if (netif_running(ndev)) {
-		if (ql_adapter_up(qdev)) {
+		err = qlge_open(ndev);
+		if (err) {
 			QPRINTK(qdev, IFUP, ERR,
 				"Device initialization failed after reset.\n");
 			return;
 		}
+	} else {
+		QPRINTK(qdev, IFUP, ERR,
+			"Device was not running prior to EEH.\n");
 	}
-
 	netif_device_attach(ndev);
 }
 

@@ -722,9 +722,10 @@ static unsigned int azx_rirb_get_response(struct hda_bus *bus,
 		   chip->last_cmd[addr]);
 	chip->single_cmd = 1;
 	bus->response_reset = 0;
-	/* re-initialize CORB/RIRB */
+	/* release CORB/RIRB */
 	azx_free_cmd_io(chip);
-	azx_init_cmd_io(chip);
+	/* disable unsolicited responses */
+	azx_writel(chip, GCTL, azx_readl(chip, GCTL) & ~ICH6_GCTL_UNSOL);
 	return -1;
 }
 
@@ -865,7 +866,9 @@ static int azx_reset(struct azx *chip)
 	}
 
 	/* Accept unsolicited responses */
-	azx_writel(chip, GCTL, azx_readl(chip, GCTL) | ICH6_GCTL_UNSOL);
+	if (!chip->single_cmd)
+		azx_writel(chip, GCTL, azx_readl(chip, GCTL) |
+			   ICH6_GCTL_UNSOL);
 
 	/* detect codecs */
 	if (!chip->codec_mask) {
@@ -980,7 +983,8 @@ static void azx_init_chip(struct azx *chip)
 	azx_int_enable(chip);
 
 	/* initialize the codec command I/O */
-	azx_init_cmd_io(chip);
+	if (!chip->single_cmd)
+		azx_init_cmd_io(chip);
 
 	/* program the position buffer */
 	azx_writel(chip, DPLBASE, (u32)chip->posbuf.addr);
@@ -2432,6 +2436,11 @@ static int __devinit azx_create(struct snd_card *card, struct pci_dev *pci,
 		}
 	}
 
+	/* disable 64bit DMA address for Teradici */
+	/* it does not work with device 6549:1200 subsys e4a2:040b */
+	if (chip->driver_type == AZX_DRIVER_TERA)
+		gcap &= ~ICH6_GCAP_64OK;
+
 	/* allow 64bit DMA address if supported by H/W */
 	if ((gcap & ICH6_GCAP_64OK) && !pci_set_dma_mask(pci, DMA_BIT_MASK(64)))
 		pci_set_consistent_dma_mask(pci, DMA_BIT_MASK(64));
@@ -2674,6 +2683,7 @@ static struct pci_device_id azx_ids[] = {
 	{ PCI_DEVICE(0x10de, 0x044b), .driver_data = AZX_DRIVER_NVIDIA },
 	{ PCI_DEVICE(0x10de, 0x055c), .driver_data = AZX_DRIVER_NVIDIA },
 	{ PCI_DEVICE(0x10de, 0x055d), .driver_data = AZX_DRIVER_NVIDIA },
+	{ PCI_DEVICE(0x10de, 0x0590), .driver_data = AZX_DRIVER_NVIDIA },
 	{ PCI_DEVICE(0x10de, 0x0774), .driver_data = AZX_DRIVER_NVIDIA },
 	{ PCI_DEVICE(0x10de, 0x0775), .driver_data = AZX_DRIVER_NVIDIA },
 	{ PCI_DEVICE(0x10de, 0x0776), .driver_data = AZX_DRIVER_NVIDIA },
@@ -2684,6 +2694,9 @@ static struct pci_device_id azx_ids[] = {
 	{ PCI_DEVICE(0x10de, 0x0ac1), .driver_data = AZX_DRIVER_NVIDIA },
 	{ PCI_DEVICE(0x10de, 0x0ac2), .driver_data = AZX_DRIVER_NVIDIA },
 	{ PCI_DEVICE(0x10de, 0x0ac3), .driver_data = AZX_DRIVER_NVIDIA },
+	{ PCI_DEVICE(0x10de, 0x0be2), .driver_data = AZX_DRIVER_NVIDIA },
+	{ PCI_DEVICE(0x10de, 0x0be3), .driver_data = AZX_DRIVER_NVIDIA },
+	{ PCI_DEVICE(0x10de, 0x0be4), .driver_data = AZX_DRIVER_NVIDIA },
 	{ PCI_DEVICE(0x10de, 0x0d94), .driver_data = AZX_DRIVER_NVIDIA },
 	{ PCI_DEVICE(0x10de, 0x0d95), .driver_data = AZX_DRIVER_NVIDIA },
 	{ PCI_DEVICE(0x10de, 0x0d96), .driver_data = AZX_DRIVER_NVIDIA },

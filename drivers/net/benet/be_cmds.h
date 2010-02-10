@@ -68,7 +68,7 @@ enum {
 #define CQE_STATUS_COMPL_MASK		0xFFFF
 #define CQE_STATUS_COMPL_SHIFT		0	/* bits 0 - 15 */
 #define CQE_STATUS_EXTD_MASK		0xFFFF
-#define CQE_STATUS_EXTD_SHIFT		0	/* bits 0 - 15 */
+#define CQE_STATUS_EXTD_SHIFT		16	/* bits 16 - 31 */
 
 struct be_mcc_compl {
 	u32 status;		/* dword 0 */
@@ -154,7 +154,8 @@ struct be_cmd_req_hdr {
 	u8 domain;		/* dword 0 */
 	u32 timeout;		/* dword 1 */
 	u32 request_length;	/* dword 2 */
-	u32 rsvd;		/* dword 3 */
+	u8 version;		/* dword 3 */
+	u8 rsvd[3];		/* dword 3 */
 };
 
 #define RESP_HDR_INFO_OPCODE_SHIFT	0	/* bits 0 - 7 */
@@ -720,8 +721,9 @@ extern int be_cmd_mac_addr_query(struct be_adapter *adapter, u8 *mac_addr,
 extern int be_cmd_pmac_add(struct be_adapter *adapter, u8 *mac_addr,
 			u32 if_id, u32 *pmac_id);
 extern int be_cmd_pmac_del(struct be_adapter *adapter, u32 if_id, u32 pmac_id);
-extern int be_cmd_if_create(struct be_adapter *adapter, u32 if_flags, u8 *mac,
-			bool pmac_invalid, u32 *if_handle, u32 *pmac_id);
+extern int be_cmd_if_create(struct be_adapter *adapter, u32 cap_flags,
+			u32 en_flags, u8 *mac, bool pmac_invalid,
+			u32 *if_handle, u32 *pmac_id);
 extern int be_cmd_if_destroy(struct be_adapter *adapter, u32 if_handle);
 extern int be_cmd_eq_create(struct be_adapter *adapter,
 			struct be_queue_info *eq, int eq_delay);

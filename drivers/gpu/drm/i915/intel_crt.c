@@ -262,8 +262,8 @@ static bool intel_crt_detect_hotplug(struct drm_connector *connector)
 		} while (time_after(timeout, jiffies));
 	}
 
-	if ((I915_READ(PORT_HOTPLUG_STAT) & CRT_HOTPLUG_MONITOR_MASK) ==
-	    CRT_HOTPLUG_MONITOR_COLOR)
+	if ((I915_READ(PORT_HOTPLUG_STAT) & CRT_HOTPLUG_MONITOR_MASK) !=
+	    CRT_HOTPLUG_MONITOR_NONE)
 		return true;
 
 	return false;
@@ -576,4 +576,6 @@ void intel_crt_init(struct drm_device *dev)
 	drm_connector_helper_add(connector, &intel_crt_connector_helper_funcs);
 
 	drm_sysfs_connector_add(connector);
+
+	dev_priv->hotplug_supported_mask |= CRT_HOTPLUG_INT_STATUS;
 }

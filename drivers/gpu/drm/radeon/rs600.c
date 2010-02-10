@@ -242,7 +242,7 @@ void rs600_irq_disable(struct radeon_device *rdev)
 
 int rs600_irq_process(struct radeon_device *rdev)
 {
-	uint32_t status;
+	uint32_t status, msi_rearm;
 	uint32_t r500_disp_int;
 
 	status = rs600_irq_ack(rdev, &r500_disp_int);
@@ -259,6 +259,22 @@ int rs600_irq_process(struct radeon_device *rdev)
 		if (G_007EDC_LB_D2_VBLANK_INTERRUPT(r500_disp_int))
 			drm_handle_vblank(rdev->ddev, 1);
 		status = rs600_irq_ack(rdev, &r500_disp_int);
+	}
+	if (rdev->msi_enabled) {
+		switch (rdev->family) {
+		case CHIP_RS600:
+		case CHIP_RS690:
+		case CHIP_RS740:
+			msi_rearm = RREG32(RADEON_BUS_CNTL) & ~RS600_MSI_REARM;
+			WREG32(RADEON_BUS_CNTL, msi_rearm);
+			WREG32(RADEON_BUS_CNTL, msi_rearm | RS600_MSI_REARM);
+			break;
+		default:
+			msi_rearm = RREG32(RADEON_MSI_REARM_EN) & ~RV370_MSI_REARM_EN;
+			WREG32(RADEON_MSI_REARM_EN, msi_rearm);
+			WREG32(RADEON_MSI_REARM_EN, msi_rearm | RV370_MSI_REARM_EN);
+			break;
+		}
 	}
 	return IRQ_HANDLED;
 }
@@ -285,9 +301,7 @@ int rs600_mc_wait_for_idle(struct radeon_device *rdev)
 
 void rs600_gpu_init(struct radeon_device *rdev)
 {
-	/* FIXME: HDP same place on rs600 ? */
 	r100_hdp_reset(rdev);
-	/* FIXME: is this correct ? */
 	r420_pipes_init(rdev);
 	/* Wait for mc idle */
 	if (rs600_mc_wait_for_idle(rdev))
@@ -296,9 +310,20 @@ void rs600_gpu_init(struct radeon_device *rdev)
 
 void rs600_vram_info(struct radeon_device *rdev)
 {
-	/* FIXME: to do or is these values sane ? */
 	rdev->mc.vram_is_ddr = true;
 	rdev->mc.vram_width = 128;
+
+	rdev->mc.real_vram_size = RREG32(RADEON_CONFIG_MEMSIZE);
+	rdev->mc.mc_vram_size = rdev->mc.real_vram_size;
+
+	rdev->mc.aper_base = drm_get_resource_start(rdev->ddev, 0);
+	rdev->mc.aper_size = drm_get_resource_len(rdev->ddev, 0);
+
+	if (rdev->mc.mc_vram_size > rdev->mc.aper_size)
+		rdev->mc.mc_vram_size = rdev->mc.aper_size;
+
+	if (rdev->mc.real_vram_size > rdev->mc.aper_size)
+		rdev->mc.real_vram_size = rdev->mc.aper_size;
 }
 
 void rs600_bandwidth_update(struct radeon_device *rdev)
@@ -472,6 +497,8 @@ int rs600_init(struct radeon_device *rdev)
 	}
 	/* Initialize clocks */
 	radeon_get_clock_info(rdev->ddev);
+	/* Initialize power management */
+	radeon_pm_init(rdev);
 	/* Get vram informations */
 	rs600_vram_info(rdev);
 	/* Initialize memory controller (also test AGP) */
