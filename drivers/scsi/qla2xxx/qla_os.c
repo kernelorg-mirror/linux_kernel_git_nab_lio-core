@@ -263,7 +263,7 @@ struct scsi_host_template qla2xxx_driver_template = {
 	.max_sectors		= 0xFFFF,
 	.shost_attrs		= qla2x00_host_attrs,
 
-	.supported_mode		= MODE_INITIATOR | MODE_TARGET,
+	.supported_mode		= MODE_INITIATOR,
 };
 
 static struct scsi_transport_template *qla2xxx_transport_template = NULL;

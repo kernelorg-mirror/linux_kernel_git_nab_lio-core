@@ -43,15 +43,15 @@
 #include "qla_def.h"
 #include "qla_target.h"
 
-static char *qlini_mode = QLA2XXX_INI_MODE_STR_DISABLED;
+static char *qlini_mode = QLA2XXX_INI_MODE_STR_ENABLED;
 module_param(qlini_mode, charp, S_IRUGO);
 MODULE_PARM_DESC(qlini_mode,
 	"Determines when initiator mode will be enabled. Possible values: "
 	"\"exclusive\" - initiator mode will be enabled on load, "
 	"disabled on enabling target mode and then on disabling target mode "
 	"enabled back; "
-	"\"disabled\" (default) - initiator mode will never be enabled; "
-	"\"enabled\" - initiator mode will always stay enabled.");
+	"\"disabled\" - initiator mode will never be enabled; "
+	"\"enabled\" (default) - initiator mode will always stay enabled.");
 
 static int ql2x_ini_mode = QLA2XXX_INI_MODE_EXCLUSIVE;
 
@@ -4113,6 +4113,9 @@ int qla_tgt_add_target(struct qla_hw_data *ha, struct scsi_qla_host *base_vha)
 {
 	struct qla_tgt *tgt;
 
+	if (ql2x_ini_mode == QLA2XXX_INI_MODE_ENABLED)
+		return 0;
+
 	ql_dbg(ql_dbg_tgt, base_vha, 0xe036, "Registering target for host %ld(%p)",
 			base_vha->host_no, ha);
 
@@ -4123,6 +4126,9 @@ int qla_tgt_add_target(struct qla_hw_data *ha, struct scsi_qla_host *base_vha)
 		printk(KERN_ERR "Unable to allocate struct qla_tgt\n");
 		return -ENOMEM;
 	}
+
+	if (!(base_vha->host->hostt->supported_mode & MODE_TARGET))
+		base_vha->host->hostt->supported_mode |= MODE_TARGET;
 
 	tgt->ha = ha;
 	tgt->vha = base_vha;
@@ -4160,11 +4166,8 @@ int qla_tgt_add_target(struct qla_hw_data *ha, struct scsi_qla_host *base_vha)
 /* Must be called under tgt_host_action_mutex */
 int qla_tgt_remove_target(struct qla_hw_data *ha, struct scsi_qla_host *vha)
 {
-	if (!ha->qla_tgt) {
-		printk(KERN_ERR "qla_target(%d): Can't remove "
-			"existing target", vha->vp_idx);
+	if (!ha->qla_tgt)
 		return 0;
-	}
 
 	mutex_lock(&qla_tgt_mutex);
 	list_del(&ha->qla_tgt->tgt_list_entry);
