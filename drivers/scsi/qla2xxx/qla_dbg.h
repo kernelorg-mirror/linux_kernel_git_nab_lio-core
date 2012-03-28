@@ -244,6 +244,7 @@ struct qla2xxx_mqueue_header {
 	uint32_t queue;
 #define TYPE_REQUEST_QUEUE	0x1
 #define TYPE_RESPONSE_QUEUE	0x2
+#define TYPE_ATIO_QUEUE		0x3
 	uint32_t number;
 	uint32_t size;
 };
