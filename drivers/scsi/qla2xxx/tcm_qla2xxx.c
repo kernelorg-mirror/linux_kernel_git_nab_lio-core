@@ -442,12 +442,12 @@ void tcm_qla2xxx_release_cmd(struct se_cmd *se_cmd)
 	if (se_cmd->se_cmd_flags & SCF_SCSI_TMR_CDB) {
 		struct qla_tgt_mgmt_cmd *mcmd = container_of(se_cmd,
 				struct qla_tgt_mgmt_cmd, se_cmd);
-		qla_tgt_free_mcmd(mcmd);
+		qlt_free_mcmd(mcmd);
 		return;
 	}
 
 	cmd = container_of(se_cmd, struct qla_tgt_cmd, se_cmd);
-	qla_tgt_free_cmd(cmd);
+	qlt_free_cmd(cmd);
 }
 
 int tcm_qla2xxx_shutdown_session(struct se_session *se_sess)
@@ -477,7 +477,7 @@ void tcm_qla2xxx_close_session(struct se_session *se_sess)
 	vha = sess->vha;
 
 	spin_lock_irqsave(&vha->hw->hardware_lock, flags);
-	qla_tgt_unreg_sess(sess);
+	qlt_unreg_sess(sess);
 	spin_unlock_irqrestore(&vha->hw->hardware_lock, flags);
 }
 
@@ -521,10 +521,10 @@ int tcm_qla2xxx_write_pending(struct se_cmd *se_cmd)
 	cmd->sg = se_cmd->t_data_sg;
 
 	/*
-	 * qla_target.c:qla_tgt_rdy_to_xfer() will call pci_map_sg() to setup
+	 * qla_target.c:qlt_rdy_to_xfer() will call pci_map_sg() to setup
 	 * the SGL mappings into PCIe memory for incoming FCP WRITE data.
 	 */
-	return qla_tgt_rdy_to_xfer(cmd);
+	return qlt_rdy_to_xfer(cmd);
 }
 
 int tcm_qla2xxx_write_pending_status(struct se_cmd *se_cmd)
@@ -564,7 +564,7 @@ int tcm_qla2xxx_get_cmd_state(struct se_cmd *se_cmd)
 }
 
 /*
- * Called from process context in qla_target.c:qla_tgt_do_work() code
+ * Called from process context in qla_target.c:qlt_do_work() code
  */
 int tcm_qla2xxx_handle_cmd(scsi_qla_host_t *vha, struct qla_tgt_cmd *cmd,
 			unsigned char *cdb, uint32_t data_length, int fcp_task_attr,
@@ -606,7 +606,7 @@ void tcm_qla2xxx_do_rsp(struct work_struct *work)
 }
 
 /*
- * Called from qla_target.c:qla_tgt_do_ctio_completion()
+ * Called from qla_target.c:qlt_do_ctio_completion()
  */
 int tcm_qla2xxx_handle_data(struct qla_tgt_cmd *cmd)
 {
@@ -642,7 +642,7 @@ int tcm_qla2xxx_handle_data(struct qla_tgt_cmd *cmd)
 }
 
 /*
- * Called from qla_target.c:qla_tgt_issue_task_mgmt()
+ * Called from qla_target.c:qlt_issue_task_mgmt()
  */
 int tcm_qla2xxx_handle_tmr(struct qla_tgt_mgmt_cmd *mcmd, uint32_t lun,
 			uint8_t tmr_func, uint32_t tag)
@@ -668,7 +668,7 @@ int tcm_qla2xxx_queue_data_in(struct se_cmd *se_cmd)
 	/*
 	 * Now queue completed DATA_IN the qla2xxx LLD and response ring
 	 */
-	return qla_tgt_xmit_response(cmd, QLA_TGT_XMIT_DATA|QLA_TGT_XMIT_STATUS,
+	return qlt_xmit_response(cmd, QLA_TGT_XMIT_DATA|QLA_TGT_XMIT_STATUS,
 				se_cmd->scsi_status);
 }
 
@@ -697,7 +697,7 @@ int tcm_qla2xxx_queue_status(struct se_cmd *se_cmd)
 	/*
 	 * Now queue status response to qla2xxx LLD code and response ring
 	 */
-	return qla_tgt_xmit_response(cmd, xmit_type, se_cmd->scsi_status);
+	return qlt_xmit_response(cmd, xmit_type, se_cmd->scsi_status);
 }
 
 int tcm_qla2xxx_queue_tm_rsp(struct se_cmd *se_cmd)
@@ -731,7 +731,7 @@ int tcm_qla2xxx_queue_tm_rsp(struct se_cmd *se_cmd)
 	 * Queue the TM response to QLA2xxx LLD to build a
 	 * CTIO response packet.
 	 */
-	qla_tgt_xmit_tm_rsp(mcmd);
+	qlt_xmit_tm_rsp(mcmd);
 
 	return 0;
 }
@@ -1044,14 +1044,14 @@ static ssize_t tcm_qla2xxx_tpg_store_enable(
 
 	if (op) {
 		atomic_set(&tpg->lport_tpg_enabled, 1);
-		qla_tgt_enable_vha(vha);
+		qlt_enable_vha(vha);
 	} else {
-		if (!ha->qla_tgt) {
-			pr_err("truct qla_hw_data *ha->qla_tgt is NULL\n");
+		if (!ha->tgt.qla_tgt) {
+			pr_err("truct qla_hw_data *ha->tgt.qla_tgt is NULL\n");
 			return -ENODEV;
 		}
 		atomic_set(&tpg->lport_tpg_enabled, 0);
-		qla_tgt_stop_phase1(ha->qla_tgt);
+		qlt_stop_phase1(ha->tgt.qla_tgt);
 	}
 
 	return count;
@@ -1126,8 +1126,8 @@ static void tcm_qla2xxx_drop_tpg(struct se_portal_group *se_tpg)
 	 * Call into qla2x_target.c LLD logic to shutdown the active
 	 * FC Nexuses and disable target mode operation for this qla_hw_data
 	 */
-	if (ha->qla_tgt && !ha->qla_tgt->tgt_stop)
-		qla_tgt_stop_phase1(ha->qla_tgt);
+	if (ha->tgt.qla_tgt && !ha->tgt.qla_tgt->tgt_stop)
+		qlt_stop_phase1(ha->tgt.qla_tgt);
 
 	core_tpg_deregister(se_tpg);
 	/*
@@ -1188,7 +1188,7 @@ static struct qla_tgt_sess *tcm_qla2xxx_find_sess_by_s_id(
 	struct tcm_qla2xxx_fc_al_pa *p;
 	unsigned char domain, area, al_pa;
 
-	lport = ha->target_lport_ptr;
+	lport = ha->tgt.target_lport_ptr;
 	if (!lport) {
 		pr_err("Unable to locate struct tcm_qla2xxx_lport\n");
 		dump_stack();
@@ -1312,7 +1312,7 @@ static struct qla_tgt_sess *tcm_qla2xxx_find_sess_by_loop_id(
 	struct tcm_qla2xxx_nacl *nacl;
 	struct tcm_qla2xxx_fc_loopid *fc_loopid;
 
-	lport = ha->target_lport_ptr;
+	lport = ha->tgt.target_lport_ptr;
 	if (!lport) {
 		pr_err("Unable to locate struct tcm_qla2xxx_lport\n");
 		dump_stack();
@@ -1430,7 +1430,7 @@ static void tcm_qla2xxx_free_session(struct qla_tgt_sess *sess)
 	se_nacl = se_sess->se_node_acl;
         nacl = container_of(se_nacl, struct tcm_qla2xxx_nacl, se_node_acl);
 
-	lport = ha->target_lport_ptr;
+	lport = ha->tgt.target_lport_ptr;
 	if (!lport) {
 		pr_err("Unable to locate struct tcm_qla2xxx_lport\n");
 		dump_stack();
@@ -1458,7 +1458,7 @@ static void tcm_qla2xxx_free_session(struct qla_tgt_sess *sess)
 }
 
 /*
- * Called via qla_tgt_create_sess():ha->qla2x_tmpl->check_initiator_node_acl()
+ * Called via qlt_create_sess():ha->qla2x_tmpl->check_initiator_node_acl()
  * to locate struct se_node_acl
  */
 static int tcm_qla2xxx_check_initiator_node_acl(
@@ -1479,7 +1479,7 @@ static int tcm_qla2xxx_check_initiator_node_acl(
 	unsigned char port_name[36];
 	unsigned long flags;
 
-	lport = ha->target_lport_ptr;
+	lport = ha->tgt.target_lport_ptr;
 	if (!lport) {
 		pr_err("Unable to locate struct tcm_qla2xxx_lport\n");
 		dump_stack();
@@ -1592,7 +1592,7 @@ static int tcm_qla2xxx_lport_register_cb(struct scsi_qla_host *vha)
  	 * Setup local pointer to vha, NPIV VP pointer (if present) and
  	 * vha->tcm_lport pointer
  	 */
-	lport = (struct tcm_qla2xxx_lport *)ha->target_lport_ptr;
+	lport = (struct tcm_qla2xxx_lport *)ha->tgt.target_lport_ptr;
 	lport->qla_vha = vha;
 	
 	return 0;
@@ -1622,7 +1622,7 @@ static struct se_wwn *tcm_qla2xxx_make_lport(
 	if (ret != 0)
 		goto out;
 
-	ret = qla_tgt_lport_register(&tcm_qla2xxx_template, wwpn,
+	ret = qlt_lport_register(&tcm_qla2xxx_template, wwpn,
 				tcm_qla2xxx_lport_register_cb, lport);
 	if (ret != 0)
 		goto out_lport;
@@ -1645,12 +1645,12 @@ static void tcm_qla2xxx_drop_lport(struct se_wwn *wwn)
 	/*
 	 * Call into qla2x_target.c LLD logic to complete the
 	 * shutdown of struct qla_tgt after the call to
-	 * qla_tgt_stop_phase1() from tcm_qla2xxx_drop_tpg() above..
+	 * qlt_stop_phase1() from tcm_qla2xxx_drop_tpg() above..
 	 */
-	if (ha->qla_tgt && !ha->qla_tgt->tgt_stopped)
-		qla_tgt_stop_phase2(ha->qla_tgt);
+	if (ha->tgt.qla_tgt && !ha->tgt.qla_tgt->tgt_stopped)
+		qlt_stop_phase2(ha->tgt.qla_tgt);
 
-	qla_tgt_lport_deregister(vha);
+	qlt_lport_deregister(vha);
 
 	vfree(lport->lport_loopid_map);
 	vfree(lport->lport_fcport_map);

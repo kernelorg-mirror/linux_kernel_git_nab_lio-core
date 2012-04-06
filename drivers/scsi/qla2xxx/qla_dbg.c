@@ -32,11 +32,9 @@
  * | ISP82XX Specific             |       0xb054       | 0xb053   	|
  * | MultiQ                       |       0xc00c       |		|
  * | Misc                         |       0xd010       |		|
- * | Target Mode		  |	  0xe037       |		|
- * | Target Mode Management	  |	  0xe14e       |		|
- * | Target Mode SCSI Packets	  |	  0xe20b       |		|
- * | Target Mode Scatterlists	  |	  0xe30c       |		|
- * | Target Mode Task Management  |	  0xe409       |		|
+ * | Target Mode		  |	  0xe06f       |		|
+ * | Target Mode Management	  |	  0xf071       |		|
+ * | Target Mode Task Management  |	  0x1000b      |		|
  * ----------------------------------------------------------------------
  */
 
@@ -396,13 +394,13 @@ qla2xxx_copy_atioqueues(struct qla_hw_data *ha, void *ptr,
 		void *ring;
 	} aq, *aqp;
 
-	if (!ha->atio_q_length)
+	if (!ha->tgt.atio_q_length)
 		return ptr;
 
 	num_queues = 1;
 	aqp = &aq;
-	aqp->length = ha->atio_q_length;
-	aqp->ring = ha->atio_ring;
+	aqp->length = ha->tgt.atio_q_length;
+	aqp->ring = ha->tgt.atio_ring;
 
 	for (que = 0; que < num_queues; que++) {
 		/* aqp = ha->atio_q_map[que]; */

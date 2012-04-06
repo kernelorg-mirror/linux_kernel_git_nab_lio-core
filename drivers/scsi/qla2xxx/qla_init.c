@@ -1239,8 +1239,8 @@ qla2x00_alloc_fw_dump(scsi_qla_host_t *vha)
 			mq_size += ha->max_rsp_queues *
 			    (rsp->length * sizeof(response_t));
 		}
-		if (ha->atio_q_length)
-			mq_size += ha->atio_q_length * sizeof(request_t);
+		if (ha->tgt.atio_q_length)
+			mq_size += ha->tgt.atio_q_length * sizeof(request_t);
 		/* Allocate memory for Fibre Channel Event Buffer. */
 		if (!IS_QLA25XX(ha) && !IS_QLA81XX(ha) && !IS_QLA83XX(ha))
 			goto try_eft;
@@ -1706,9 +1706,9 @@ qla24xx_config_rings(struct scsi_qla_host *vha)
 
 	/* Setup ATIO queue dma pointers for target mode */
 	icb->atio_q_inpointer = __constant_cpu_to_le16(0);
-	icb->atio_q_length = cpu_to_le16(ha->atio_q_length);
-	icb->atio_q_address[0] = cpu_to_le32(LSD(ha->atio_dma));
-	icb->atio_q_address[1] = cpu_to_le32(MSD(ha->atio_dma));
+	icb->atio_q_length = cpu_to_le16(ha->tgt.atio_q_length);
+	icb->atio_q_address[0] = cpu_to_le32(LSD(ha->tgt.atio_dma));
+	icb->atio_q_address[1] = cpu_to_le32(MSD(ha->tgt.atio_dma));
 
 	if (ha->mqenable || IS_QLA83XX(ha)) {
 		icb->qos = __constant_cpu_to_le16(QLA_DEFAULT_QUE_QOS);
@@ -1753,7 +1753,7 @@ qla24xx_config_rings(struct scsi_qla_host *vha)
 		WRT_REG_DWORD(&reg->isp24.rsp_q_in, 0);
 		WRT_REG_DWORD(&reg->isp24.rsp_q_out, 0);
 	}
-	qla_tgt_24xx_config_rings(vha, reg);
+	qlt_24xx_config_rings(vha, reg);
 
 	/* PCI posting */
 	RD_REG_DWORD(&ioreg->hccr);
@@ -1810,10 +1810,10 @@ qla2x00_init_rings(scsi_qla_host_t *vha)
 
 	spin_unlock(&ha->vport_slock);
 
-	ha->atio_ring_ptr = ha->atio_ring;
-	ha->atio_ring_index = 0;
+	ha->tgt.atio_ring_ptr = ha->tgt.atio_ring;
+	ha->tgt.atio_ring_index = 0;
 	/* Initialize ATIO queue entries */
-	qla_tgt_init_atio_q_entries(vha);
+	qlt_init_atio_q_entries(vha);
 
 	ha->isp_ops->config_rings(vha);
 
@@ -2072,7 +2072,9 @@ qla2x00_configure_hba(scsi_qla_host_t *vha)
 	vha->d_id.b.area = area;
 	vha->d_id.b.al_pa = al_pa;
 
-	ha->tgt_vp_map[al_pa].idx = vha->vp_idx;
+	spin_lock(&ha->vport_slock);
+	qlt_update_vp_map(vha, SET_AL_PA);
+	spin_unlock(&ha->vport_slock);
 
 	if (!vha->flags.init_done)
 		ql_log(ql_log_info, vha, 0x2010,
@@ -2285,23 +2287,15 @@ qla2x00_nvram_config(scsi_qla_host_t *vha)
 	/*
 	 * Setup driver NVRAM options.
 	 */
-	/* Enable ADISC and fairness */
 	nv->firmware_options[0] |= (BIT_6 | BIT_1);
 	nv->firmware_options[0] &= ~(BIT_5 | BIT_4);
 	nv->firmware_options[1] |= (BIT_5 | BIT_0);
-	/* Enable PDB changed AE */
-	nv->firmware_options[1] |= BIT_0;
-	/* Stop Port Queue on Full Status */
 	nv->firmware_options[1] &= ~BIT_4;
 
 	if (IS_QLA23XX(ha)) {
-		/* Enable full duplex */
 		nv->firmware_options[0] |= BIT_2;
-		/* Disable Fast Status Posting */
 		nv->firmware_options[0] &= ~BIT_3;
-		/* out-of-order frames rassembly */
-		nv->special_options[0] |= BIT_6;
-		/* P2P preferred, otherwise loop */
+		nv->special_options[0] &= ~BIT_6;
 		nv->add_firmware_options[1] |= BIT_5 | BIT_4;
 
 		if (IS_QLA2300(ha)) {
@@ -2315,7 +2309,6 @@ qla2x00_nvram_config(scsi_qla_host_t *vha)
 			    sizeof(nv->model_number), "QLA23xx");
 		}
 	} else if (IS_QLA2200(ha)) {
-		/* Enable full duplex */
 		nv->firmware_options[0] |= BIT_2;
 		/*
 		 * 'Point-to-point preferred, else loop' is not a safe
@@ -2347,8 +2340,8 @@ qla2x00_nvram_config(scsi_qla_host_t *vha)
 	while (cnt--)
 		*dptr1++ = *dptr2++;
 
+	/* Use alternate WWN? */
 	if (nv->host_p[1] & BIT_7) {
-		/* Use alternate WWN? */
 		memcpy(icb->node_name, nv->alternate_node_name, WWN_SIZE);
 		memcpy(icb->port_name, nv->alternate_port_name, WWN_SIZE);
 	}
@@ -2512,7 +2505,7 @@ qla2x00_rport_del(void *data)
 		 * Release the target mode FC NEXUS in qla_target.c code
 		 * if target mod is enabled.
 		 */
-		qla_tgt_fc_port_deleted(vha, fcport);
+		qlt_fc_port_deleted(vha, fcport);
 	}
 }
 
@@ -2907,7 +2900,7 @@ qla2x00_reg_remote_port(scsi_qla_host_t *vha, fc_port_t *fcport)
 	 * Create target mode FC NEXUS in qla_target.c if target mode is
 	 * enabled..
 	 */
-	qla_tgt_fc_port_added(vha, fcport);
+	qlt_fc_port_added(vha, fcport);
 
 	spin_lock_irqsave(fcport->vha->host->host_lock, flags);
 	*((fc_port_t **)rport->dd_data) = fcport;
@@ -3642,9 +3635,8 @@ qla2x00_fabric_login(scsi_qla_host_t *vha, fc_port_t *fcport,
 
 			if (IS_FWI2_CAPABLE(ha)) {
 				if (mb[10] & BIT_7)
-					fcport->conf_compl_supported = 1;
-			} else {
-				/* mb[10] bits are undocumented, ToDo */
+					fcport->flags |=
+					    FCF_CONF_COMP_SUPPORTED;
 			}
 
 			rval = QLA_SUCCESS;
@@ -4150,7 +4142,7 @@ qla2x00_restart_isp(scsi_qla_host_t *vha)
 			 */
 			spin_lock_irqsave(&ha->hardware_lock, flags);
 			if (qla_tgt_mode_enabled(vha))
-				qla_tgt_24xx_process_atio_queue(vha);
+				qlt_24xx_process_atio_queue(vha);
 			spin_unlock_irqrestore(&ha->hardware_lock, flags);
 
 			/* Wait at most MAX_TARGET RSCNs for a stable link. */
@@ -4400,7 +4392,7 @@ qla24xx_nvram_config(scsi_qla_host_t *vha)
 		nv->host_p &= __constant_cpu_to_le32(~BIT_10);
 	}
 
-	qla_tgt_24xx_config_nvram_stage1(vha, nv);
+	qlt_24xx_config_nvram_stage1(vha, nv);
 
 	/* Reset Initialization control block */
 	memset(icb, 0, ha->init_cb_size);
@@ -4429,7 +4421,7 @@ qla24xx_nvram_config(scsi_qla_host_t *vha)
 	qla2x00_set_model_info(vha, nv->model_name, sizeof(nv->model_name),
 	    "QLA2462");
 
-	qla_tgt_24xx_config_nvram_stage2(vha, icb);
+	qlt_24xx_config_nvram_stage2(vha, icb);
 
 	if (nv->host_p & __constant_cpu_to_le32(BIT_15)) {
 		/* Use alternate WWN? */

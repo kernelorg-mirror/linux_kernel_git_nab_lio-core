@@ -1420,7 +1420,7 @@ qla2x00_get_port_database(scsi_qla_host_t *vha, fc_port_t *fcport, uint8_t opt)
 				FC_COS_CLASS2 : FC_COS_CLASS3;
 
 		if (pd24->prli_svc_param_word_3[0] & BIT_7)
-			fcport->conf_compl_supported = 1;
+			fcport->flags |= FCF_CONF_COMP_SUPPORTED;
 	} else {
 		uint64_t zero = 0;
 
@@ -1463,9 +1463,6 @@ qla2x00_get_port_database(scsi_qla_host_t *vha, fc_port_t *fcport, uint8_t opt)
 		/* Passback COS information. */
 		fcport->supported_classes = (pd->options & BIT_4) ?
 		    FC_COS_CLASS2: FC_COS_CLASS3;
-
-		if (pd->prli_svc_param_word_3[0] & BIT_7)
-			fcport->conf_compl_supported = 1;
 	}
 
 gpd_error_out:
@@ -1481,7 +1478,6 @@ gpd_error_out:
 
 	return rval;
 }
-EXPORT_SYMBOL(qla2x00_get_port_database);
 
 /*
  * qla2x00_get_firmware_state
@@ -3117,7 +3113,7 @@ qla24xx_modify_vp_config(scsi_qla_host_t *vha)
 	vpmod->vp_index1 = vha->vp_idx;
 	vpmod->options_idx1 = BIT_3|BIT_4|BIT_5;
 
-	qla_tgt_modify_vp_config(vha, vpmod);
+	qlt_modify_vp_config(vha, vpmod);
 
 	memcpy(vpmod->node_name_idx1, vha->node_name, WWN_SIZE);
 	memcpy(vpmod->port_name_idx1, vha->port_name, WWN_SIZE);
