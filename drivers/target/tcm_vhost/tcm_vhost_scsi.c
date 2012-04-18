@@ -101,14 +101,14 @@ static void vhost_scsi_complete_cmd_work(struct vhost_work *work)
 		       v_rsp.sense_len);
 		ret = copy_to_user(tv_cmd->tvc_resp, &v_rsp, sizeof(v_rsp));
 		if (likely(ret == 0))
-			vhost_add_used(&vs->cmd_vq, tv_cmd->tvc_vq_desc, 0);
+			vhost_add_used(&vs->vqs[2], tv_cmd->tvc_vq_desc, 0);
 		else
 			pr_err("Faulted on virtio_scsi_cmd_resp\n");
 
 		vhost_scsi_free_cmd(tv_cmd);
 	}
 
-	vhost_signal(&vs->dev, &vs->cmd_vq);
+	vhost_signal(&vs->dev, &vs->vqs[2]);
 }
 
 void vhost_scsi_complete_cmd(struct tcm_vhost_cmd *tv_cmd)
@@ -271,7 +271,7 @@ static int vhost_scsi_map_iov_to_sgl(struct tcm_vhost_cmd *tv_cmd,
 
 static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 {
-	struct vhost_virtqueue *vq = &vs->cmd_vq;
+	struct vhost_virtqueue *vq = &vs->vqs[2];
 	struct virtio_scsi_cmd_req v_req;
 	struct tcm_vhost_tpg *tv_tpg;
 	struct tcm_vhost_cmd *tv_cmd;
@@ -421,6 +421,16 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 	mutex_unlock(&vq->mutex);
 }
 
+static void vhost_scsi_ctl_handle_kick(struct vhost_work *work)
+{
+     pr_err("%s: The handling func for control queue.\n", __func__);
+}
+
+static void vhost_scsi_evt_handle_kick(struct vhost_work *work)
+{
+     pr_err("%s: The handling func for event queue.\n", __func__);
+}
+
 static void vhost_scsi_handle_kick(struct vhost_work *work)
 {
 	struct vhost_virtqueue *vq = container_of(work, struct vhost_virtqueue,
@@ -440,19 +450,23 @@ static int vhost_scsi_set_endpoint(
 {
 	struct tcm_vhost_tport *tv_tport;
 	struct tcm_vhost_tpg *tv_tpg;
-	struct vhost_virtqueue *vq = &vs->cmd_vq;
+        int index;
 
-	mutex_lock(&vq->mutex);
+	mutex_lock(&vs->dev.mutex);
 	/* Verify that ring has been setup correctly. */
-	if (!vhost_vq_access_ok(vq)) {
-		mutex_unlock(&vq->mutex);
-		return -EFAULT;
+	for (index = 0; index < vs->dev.nvqs; ++index) {
+		/* Verify that ring has been setup correctly. */
+		if (!vhost_vq_access_ok(&vs->vqs[index])) {
+		        mutex_unlock(&vs->dev.mutex);
+			return -EFAULT;
+		}
 	}
+
 	if (vs->vs_tpg) {
-		mutex_unlock(&vq->mutex);
+		mutex_unlock(&vs->dev.mutex);
 		return -EEXIST;
 	}
-	mutex_unlock(&vq->mutex);
+	mutex_unlock(&vs->dev.mutex);
 
 	mutex_lock(&tcm_vhost_mutex);
 	list_for_each_entry(tv_tpg, &tcm_vhost_list, tv_tpg_list) {
@@ -474,17 +488,16 @@ static int vhost_scsi_set_endpoint(
 			mutex_unlock(&tv_tpg->tv_tpg_mutex);
 			mutex_unlock(&tcm_vhost_mutex);
 
-			mutex_lock(&vq->mutex);
+			mutex_lock(&vs->dev.mutex);
 			vs->vs_tpg = tv_tpg;
 			atomic_inc(&vs->vhost_ref_cnt);
 			smp_mb__after_atomic_inc();
-			mutex_unlock(&vq->mutex);
+			mutex_unlock(&vs->dev.mutex);
 			return 0;
 		}
 		mutex_unlock(&tv_tpg->tv_tpg_mutex);
 	}
 	mutex_unlock(&tcm_vhost_mutex);
-
 	return -EINVAL;
 }
 
@@ -494,16 +507,19 @@ static int vhost_scsi_clear_endpoint(
 {
 	struct tcm_vhost_tport *tv_tport;
 	struct tcm_vhost_tpg *tv_tpg;
-	struct vhost_virtqueue *vq = &vs->cmd_vq;
+        int index;
 
-	mutex_lock(&vq->mutex);
+	mutex_lock(&vs->dev.mutex);
 	/* Verify that ring has been setup correctly. */
-	if (!vhost_vq_access_ok(vq)) {
-		mutex_unlock(&vq->mutex);
-		return -EFAULT;
+	for (index = 0; index < vs->dev.nvqs; ++index) {
+		if (!vhost_vq_access_ok(&vs->vqs[index])) {
+		        mutex_unlock(&vs->dev.mutex);
+			return -EFAULT;
+		}
 	}
+
 	if (!vs->vs_tpg) {
-		mutex_unlock(&vq->mutex);
+		mutex_unlock(&vs->dev.mutex);
 		return -ENODEV;
 	}
 	tv_tpg = vs->vs_tpg;
@@ -511,15 +527,16 @@ static int vhost_scsi_clear_endpoint(
 
 	if (strcmp(tv_tport->tport_name, t->vhost_wwpn) ||
 	    (tv_tpg->tport_tpgt != t->vhost_tpgt)) {
-		mutex_unlock(&vq->mutex);
+		mutex_unlock(&vs->dev.mutex);
 		pr_warn("tv_tport->tport_name: %s, tv_tpg->tport_tpgt: %hu"
 			" does not match t->vhost_wwpn: %s, t->vhost_tpgt: %hu\n",
 			tv_tport->tport_name, tv_tpg->tport_tpgt,
 			t->vhost_wwpn, t->vhost_tpgt);
 		return -EINVAL;
 	}
+        atomic_dec(&tv_tpg->tv_tpg_vhost_count);
 	vs->vs_tpg = NULL;
-	mutex_unlock(&vq->mutex);
+	mutex_unlock(&vs->dev.mutex);
 
 	return 0;
 }
@@ -537,8 +554,10 @@ static int vhost_scsi_open(struct inode *inode, struct file *f)
 	INIT_LIST_HEAD(&s->vs_completion_list);
 	spin_lock_init(&s->vs_completion_lock);
 
-	s->cmd_vq.handle_kick = vhost_scsi_handle_kick;
-	r = vhost_dev_init(&s->dev, &s->cmd_vq, 1);
+	s->vqs[0].handle_kick = vhost_scsi_ctl_handle_kick;
+	s->vqs[1].handle_kick = vhost_scsi_evt_handle_kick;
+	s->vqs[2].handle_kick = vhost_scsi_handle_kick;
+	r = vhost_dev_init(&s->dev, s->vqs, 3);
 	if (r < 0) {
 		kfree(s);
 		return r;

@@ -2,7 +2,7 @@ struct vhost_scsi {
 	atomic_t vhost_ref_cnt;
 	struct tcm_vhost_tpg *vs_tpg;
 	struct vhost_dev dev;
-	struct vhost_virtqueue cmd_vq;
+	struct vhost_virtqueue vqs[3];
 
 	struct vhost_work vs_completion_work; /* cmd completion work item */
 	struct list_head vs_completion_list;  /* cmd completion queue */
