@@ -562,6 +562,13 @@ static int vhost_scsi_release(struct inode *inode, struct file *f)
 {
 	struct vhost_scsi *s = f->private_data;
 
+        if (s->vs_tpg && s->vs_tpg->tport) {
+            struct vhost_vring_target backend;
+            memcpy(backend.vhost_wwpn, s->vs_tpg->tport->tport_name, sizeof(backend.vhost_wwpn));
+            backend.vhost_tpgt = s->vs_tpg->tport_tpgt;
+            vhost_scsi_clear_endpoint(s, &backend);
+        }
+
 	vhost_dev_cleanup(&s->dev, false);
 	kfree(s);
 	return 0;
