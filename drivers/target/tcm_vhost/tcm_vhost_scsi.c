@@ -99,7 +99,7 @@ static void vhost_scsi_complete_cmd_work(struct vhost_work *work)
 		v_rsp.sense_len = se_cmd->scsi_sense_length;
 		memcpy(v_rsp.sense, tv_cmd->tvc_sense_buf,
 		       v_rsp.sense_len);
-		ret = copy_to_user(tv_cmd->tvc_footer, &v_rsp, sizeof(v_rsp));
+		ret = copy_to_user(tv_cmd->tvc_resp, &v_rsp, sizeof(v_rsp));
 		if (likely(ret == 0))
 			vhost_add_used(&vs->cmd_vq, tv_cmd->tvc_vq_desc, 0);
 		else
@@ -318,7 +318,7 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 		}
 
 		/*
-		 * Check for a sane footer buffer so we can report errors to
+		 * Check for a sane resp buffer so we can report errors to
 		 * the guest.
 		 */
 		if (unlikely(vq->iov[out + in - 1].iov_len !=
@@ -359,7 +359,8 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 			       " got %zu bytes\n", vq->iov[out + in - 1].iov_len);
 			break;
 		}
-		tv_cmd->tvc_footer = vq->iov[out + in - 1].iov_base;
+
+		tv_cmd->tvc_resp = vq->iov[out + in -1].iov_base;
 
 		if (unlikely(vq->iov[1].iov_len > TCM_VHOST_MAX_CDB_SIZE)) {
 			pr_err("CDB length: %zu exceeds %d\n",
