@@ -306,11 +306,11 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 		}
 
 #warning FIXME: BIDI operation
-		if (out == 2 && in == 1) {
+		if (out == 1 && in == 1) {
 			data_direction = DMA_NONE;
-		} else if (out == 2 && in > 1) {
+		} else if (out == 1 && in > 1) {
 			data_direction = DMA_FROM_DEVICE;
-		} else if (out > 2 && in == 1) {
+		} else if (out > 1 && in == 1) {
 			data_direction = DMA_TO_DEVICE;
 		} else {
 			pr_err("Invalid buffer layout out: %u in: %u\n", out, in);
@@ -321,10 +321,10 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 		 * Check for a sane resp buffer so we can report errors to
 		 * the guest.
 		 */
-		if (unlikely(vq->iov[out + in - 1].iov_len !=
+		if (unlikely(vq->iov[out].iov_len !=
 					sizeof(struct virtio_scsi_cmd_resp))) {
 			pr_err("Expecting virtio_scsi_cmd_resp, got %zu bytes\n",
-					vq->iov[out + in - 1].iov_len);
+					vq->iov[out].iov_len);
 			break;
 		}
 
@@ -340,7 +340,7 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 		}
 
 		exp_data_len = 0;
-		for (i = 2; i < out + in - 1; i++) {
+		for (i = 2; i < out + in; i++) {
 			exp_data_len += vq->iov[i].iov_len;
 		}
 
@@ -353,32 +353,21 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 
 		tv_cmd->tvc_vhost = vs;
 
-		if (unlikely(vq->iov[out + in - 1].iov_len !=
+		if (unlikely(vq->iov[out].iov_len !=
 		             sizeof(struct virtio_scsi_cmd_resp))) {
 			pr_err("Expecting virtio_scsi_cmd_resp, "
-			       " got %zu bytes\n", vq->iov[out + in - 1].iov_len);
+			       " got %zu bytes, out: %d, in: %d\n", vq->iov[out].iov_len, out, in);
 			break;
 		}
 
-		tv_cmd->tvc_resp = vq->iov[out + in -1].iov_base;
+		tv_cmd->tvc_resp = vq->iov[out].iov_base;
 
-		if (unlikely(vq->iov[1].iov_len > TCM_VHOST_MAX_CDB_SIZE)) {
-			pr_err("CDB length: %zu exceeds %d\n",
-				vq->iov[1].iov_len, TCM_VHOST_MAX_CDB_SIZE);
-			/* TODO clean up and free tv_cmd */
-			break;
-		}
 		/*
 		 * Copy in the recieved CDB descriptor into tv_cmd->tvc_cdb
 		 * that will be used by tcm_vhost_new_cmd_map() and down into
 		 * target_setup_cmd_from_cdb()
 		 */
-		ret = __copy_from_user(tv_cmd->tvc_cdb, vq->iov[1].iov_base,
-					vq->iov[1].iov_len);
-		if (unlikely(ret)) {
-			pr_err("Faulted on CDB\n");
-			break; /* TODO should all breaks be continues? */
-		}
+		memcpy(tv_cmd->tvc_cdb, v_req.cdb, TCM_VHOST_MAX_CDB_SIZE);
 		/*
 		 * Check that the recieved CDB size does not exceeded our
 		 * hardcoded max for tcm_vhost
@@ -396,8 +385,8 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 			tv_cmd->tvc_cdb[0], lun);
 
 		if (data_direction != DMA_NONE) {
-			ret = vhost_scsi_map_iov_to_sgl(tv_cmd, &vq->iov[2],
-					out + in - 3, data_direction == DMA_TO_DEVICE);
+			ret = vhost_scsi_map_iov_to_sgl(tv_cmd, &vq->iov[0],
+					out + in, data_direction == DMA_TO_DEVICE);
 			if (unlikely(ret)) {
 				pr_err("Failed to map iov to sgl\n");
 				break; /* TODO */
