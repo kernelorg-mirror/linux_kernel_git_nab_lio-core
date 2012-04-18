@@ -390,9 +390,9 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 				scsi_command_size(tv_cmd->tvc_cdb), TCM_VHOST_MAX_CDB_SIZE);
 			break; /* TODO */
 		}
-		lun = scsilun_to_int((struct scsi_lun *)&v_req.lun[0]);
+		lun = ((v_req.lun[2] << 8) | v_req.lun[3]) & 0x3FFF;
 
-		printk("vhost_scsi got command opcode: %#02x, lun: %d\n",
+		pr_err("vhost_scsi got command opcode: %#02x, lun: %d\n",
 			tv_cmd->tvc_cdb[0], lun);
 
 		if (data_direction != DMA_NONE) {
