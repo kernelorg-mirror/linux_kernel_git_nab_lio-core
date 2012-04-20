@@ -275,7 +275,7 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 	struct virtio_scsi_cmd_req v_req;
 	struct tcm_vhost_tpg *tv_tpg;
 	struct tcm_vhost_cmd *tv_cmd;
-	u32 exp_data_len, data_direction;
+	u32 exp_data_len, data_first, data_num, data_direction;
 	unsigned out, in, i;
 	int head, ret, lun;
 
@@ -308,10 +308,16 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 #warning FIXME: BIDI operation
 		if (out == 1 && in == 1) {
 			data_direction = DMA_NONE;
+			data_first = 0;
+			data_num = 0;
 		} else if (out == 1 && in > 1) {
 			data_direction = DMA_FROM_DEVICE;
+			data_first = out + 1;
+			data_num = in - 1;
 		} else if (out > 1 && in == 1) {
 			data_direction = DMA_TO_DEVICE;
+			data_first = 1;
+			data_num = out - 1;
 		} else {
 			pr_err("Invalid buffer layout out: %u in: %u\n", out, in);
 			break;
@@ -340,8 +346,8 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 		}
 
 		exp_data_len = 0;
-		for (i = 2; i < out + in; i++) {
-			exp_data_len += vq->iov[i].iov_len;
+		for (i = 0; i < data_num; i++) {
+			exp_data_len += vq->iov[data_first + i].iov_len;
 		}
 
 		tv_cmd = vhost_scsi_allocate_cmd(tv_tpg, &v_req,
@@ -385,8 +391,8 @@ static void vhost_scsi_handle_vq(struct vhost_scsi *vs)
 			tv_cmd->tvc_cdb[0], lun);
 
 		if (data_direction != DMA_NONE) {
-			ret = vhost_scsi_map_iov_to_sgl(tv_cmd, &vq->iov[0],
-					out + in, data_direction == DMA_TO_DEVICE);
+			ret = vhost_scsi_map_iov_to_sgl(tv_cmd, &vq->iov[data_first],
+					data_num, data_direction == DMA_TO_DEVICE);
 			if (unlikely(ret)) {
 				pr_err("Failed to map iov to sgl\n");
 				break; /* TODO */
