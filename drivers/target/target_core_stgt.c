@@ -340,7 +340,7 @@ static int stgt_do_task(struct se_task *task)
 	memcpy(st->stgt_cdb, cmd->t_task_cdb,
 		scsi_command_size(cmd->t_task_cdb));
 	memcpy(sc->cmnd, st->stgt_cdb, MAX_COMMAND_SIZE);
-	sc->sdb.length = task->task_size;
+	sc->sdb.length = task->task_se_cmd->data_length;
 	sc->sdb.table.sgl = task->task_sg;
 	sc->tag = tag;
 
