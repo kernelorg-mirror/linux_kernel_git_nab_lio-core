@@ -337,7 +337,8 @@ static int stgt_do_task(struct se_task *task)
 		return -ENOMEM;
 	}
 
-	target_get_task_cdb(task, st->stgt_cdb);
+	memcpy(st->stgt_cdb, cmd->t_task_cdb,
+		scsi_command_size(cmd->t_task_cdb));
 	memcpy(sc->cmnd, st->stgt_cdb, MAX_COMMAND_SIZE);
 	sc->sdb.length = task->task_size;
 	sc->sdb.table.sgl = task->task_sg;
