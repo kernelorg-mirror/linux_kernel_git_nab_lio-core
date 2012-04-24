@@ -280,19 +280,9 @@ static void stgt_free_device(void *p)
 	kfree(sdv);
 }
 
-static inline struct stgt_plugin_task *STGT_TASK(struct se_task *task)
+static int stgt_transport_complete(struct se_cmd *cmd, struct scatterlist *sgl)
 {
-	return container_of(task, struct stgt_plugin_task, stgt_task);
-}
-
-
-/*	pscsi_transport_complete():
- *
- *
- */
-static int stgt_transport_complete(struct se_task *task)
-{
-	struct stgt_plugin_task *st = STGT_TASK(task);
+	struct stgt_plugin_task *st = cmd->priv;
 	int result;
 
 	result = st->stgt_result;
@@ -302,46 +292,28 @@ static int stgt_transport_complete(struct se_task *task)
 	return 0;
 }
 
-static struct se_task *
-stgt_alloc_task(unsigned char *cdb)
+static int stgt_execute_cmd(struct se_cmd *cmd, struct scatterlist *sgl,
+		u32 sgl_nents, enum dma_data_direction data_direction)
 {
 	struct stgt_plugin_task *st;
-
-	st = kzalloc(sizeof(struct stgt_plugin_task), GFP_KERNEL);
-	if (!st) {
-		pr_err("Unable to allocate struct stgt_plugin_task\n");
-		return NULL;
-	}
-
-	return &st->stgt_task;
-}
-
-/*      stgt_do_task(): (Part of se_subsystem_api_t template)
- *
- *
- */
-static int stgt_do_task(struct se_task *task)
-{
-	struct se_cmd *cmd = task->task_se_cmd;
-	struct stgt_plugin_task *st = STGT_TASK(task);
-	struct Scsi_Host *sh = task->task_se_cmd->se_dev->se_hba->hba_ptr;
+	struct Scsi_Host *sh = cmd->se_dev->se_hba->hba_ptr;
 	struct scsi_cmnd *sc;
 	int tag = MSG_SIMPLE_TAG;
 
-	sc = scsi_host_get_command(sh, task->task_data_direction,
-				   GFP_KERNEL);
-	if (!sc) {
-		pr_err("Unable to allocate memory for struct"
-			" scsi_cmnd\n");
-		cmd->scsi_sense_reason = TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
-		return -ENOMEM;
-	}
+	st = kzalloc(sizeof(struct stgt_plugin_task), GFP_KERNEL);
+	if (!st)
+		goto fail;
+	cmd->priv = st;
+
+	sc = scsi_host_get_command(sh, data_direction, GFP_KERNEL);
+	if (!sc)
+		goto fail_free_st;
 
 	memcpy(st->stgt_cdb, cmd->t_task_cdb,
 		scsi_command_size(cmd->t_task_cdb));
 	memcpy(sc->cmnd, st->stgt_cdb, MAX_COMMAND_SIZE);
-	sc->sdb.length = task->task_se_cmd->data_length;
-	sc->sdb.table.sgl = task->task_sg;
+	sc->sdb.length = cmd->data_length;
+	sc->sdb.table.sgl = sgl;
 	sc->tag = tag;
 
 	BUG();
@@ -356,17 +328,12 @@ static int stgt_do_task(struct se_task *task)
 	}
 #endif
 	return 0;
-}
 
-/*	stgt_free_task(): (Part of se_subsystem_api_t template)
- *
- *
- */
-static void stgt_free_task(struct se_task *task)
-{
-	struct stgt_plugin_task *st = STGT_TASK(task);
-
+fail_free_st:
 	kfree(st);
+fail:
+	cmd->scsi_sense_reason = TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+	return -ENOMEM;
 }
 
 enum {
@@ -465,13 +432,9 @@ static ssize_t stgt_show_configfs_dev_params(
 	return bl;
 }
 
-/*	stgt_get_sense_buffer():
- *
- *
- */
-static unsigned char *stgt_get_sense_buffer(struct se_task *task)
+static unsigned char *stgt_get_sense_buffer(struct se_cmd *cmd)
 {
-	struct stgt_plugin_task *pt = STGT_TASK(task);
+	struct stgt_plugin_task *pt = cmd->priv;
 
 	return pt->stgt_sense;
 }
@@ -500,40 +463,6 @@ static u32 stgt_get_device_type(struct se_device *dev)
 	return sd->type;
 }
 
-/*	stgt_handle_SAM_STATUS_failures():
- *
- *
- */
-static inline void stgt_process_SAM_status(
-	struct se_task *task,
-	struct stgt_plugin_task *st)
-{
-	task->task_scsi_status = status_byte(st->stgt_result);
-	if (task->task_scsi_status) {
-		task->task_scsi_status <<= 1;
-		pr_debug("PSCSI Status Byte exception at task: %p CDB:"
-			" 0x%02x Result: 0x%08x\n", task, st->stgt_cdb[0],
-			st->stgt_result);
-	}
-
-	switch (host_byte(st->stgt_result)) {
-	case DID_OK:
-		transport_complete_task(task, (!task->task_scsi_status));
-		break;
-	default:
-		pr_debug("PSCSI Host Byte exception at task: %p CDB:"
-			" 0x%02x Result: 0x%08x\n", task, st->stgt_cdb[0],
-			st->stgt_result);
-		task->task_scsi_status = SAM_STAT_CHECK_CONDITION;
-		task->task_se_cmd->scsi_sense_reason =
-					TCM_UNSUPPORTED_SCSI_OPCODE;
-		transport_complete_task(task, 0);
-		break;
-	}
-
-	return;
-}
-
 /*
  * Use for struct scsi_host_template->transfer_response() function pointer
  * that is called from STGT in drivers/scsi/scsi_tgt_lib.c:
@@ -542,17 +471,9 @@ static inline void stgt_process_SAM_status(
 static int stgt_transfer_response(struct scsi_cmnd *sc,
 			   void (*done)(struct scsi_cmnd *))
 {
-	struct se_task *task = (struct se_task *)sc->SCp.ptr;
-	struct stgt_plugin_task *st = STGT_TASK(task);
+	struct se_cmd *cmd = (struct se_cmd *)sc->SCp.ptr;
+	struct stgt_plugin_task *st = cmd->priv;
 
-	if (!task) {
-		pr_err("struct se_task is NULL!\n");
-		BUG();
-	}
-	if (!st) {
-		pr_err("struct stgt_plugin_task is NULL!\n");
-		BUG();
-	}
 	st->stgt_result = sc->request->errors;
 	st->stgt_resid = sc->request->resid_len;
 
@@ -560,8 +481,29 @@ static int stgt_transfer_response(struct scsi_cmnd *sc,
 #if 0
 	memcpy(st->stgt_sense, sense, SCSI_SENSE_BUFFERSIZE);
 #endif
-	stgt_process_SAM_status(task, st);
+
+	cmd->scsi_status = status_byte(st->stgt_result) << 1;
+	if (cmd->scsi_status) {
+		pr_debug("PSCSI Status Byte exception at cmd: %p CDB:"
+			" 0x%02x Result: 0x%08x\n", cmd, st->stgt_cdb[0],
+			st->stgt_result);
+	}
+
+	switch (host_byte(st->stgt_result)) {
+	case DID_OK:
+		target_complete_cmd(cmd, cmd->scsi_status);
+		break;
+	default:
+		pr_debug("PSCSI Host Byte exception at cmd: %p CDB:"
+			" 0x%02x Result: 0x%08x\n", cmd, st->stgt_cdb[0],
+			st->stgt_result);
+		cmd->scsi_sense_reason = TCM_UNSUPPORTED_SCSI_OPCODE;
+		target_complete_cmd(cmd, SAM_STAT_CHECK_CONDITION);
+		break;
+	}
+
 	done(sc);
+	kfree(st);
 	return 0;
 }
 
@@ -575,9 +517,7 @@ static struct se_subsystem_api stgt_template = {
 	.create_virtdevice	= stgt_create_virtdevice,
 	.free_device		= stgt_free_device,
 	.transport_complete	= stgt_transport_complete,
-	.alloc_task		= stgt_alloc_task,
-	.do_task		= stgt_do_task,
-	.free_task		= stgt_free_task,
+	.execute_cmd		= stgt_execute_cmd,
 	.check_configfs_dev_params = stgt_check_configfs_dev_params,
 	.set_configfs_dev_params = stgt_set_configfs_dev_params,
 	.show_configfs_dev_params = stgt_show_configfs_dev_params,

@@ -18,7 +18,6 @@
 #include <linux/kobject.h>
 
 struct stgt_plugin_task {
-	struct se_task stgt_task;
 	unsigned char stgt_cdb[TCM_MAX_COMMAND_SIZE];
 	unsigned char stgt_sense[SCSI_SENSE_BUFFERSIZE];
 	int	stgt_result;
