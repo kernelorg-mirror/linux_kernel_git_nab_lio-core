@@ -691,6 +691,7 @@ static void qlt_del_sess_work_fn(struct delayed_work *work)
 				ql_dbg(ql_dbg_tgt_mgt, vha, 0xf004,
 				    "Timeout: sess %p about to be deleted\n",
 				    sess);
+				ha->tgt.tgt_ops->shutdown_sess(sess);
 				ha->tgt.tgt_ops->put_sess(sess);
 			}
 
