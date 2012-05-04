@@ -94,18 +94,22 @@ extern char *tcm_qla2xxx_get_fabric_wwn(struct se_portal_group *);
 extern char *tcm_qla2xxx_npiv_get_fabric_wwn(struct se_portal_group *);
 extern u16 tcm_qla2xxx_get_tag(struct se_portal_group *);
 extern u32 tcm_qla2xxx_get_default_depth(struct se_portal_group *);
-extern u32 tcm_qla2xxx_get_pr_transport_id(struct se_portal_group *, struct se_node_acl *,
-			struct t10_pr_registration *, int *, unsigned char *);
-extern u32 tcm_qla2xxx_get_pr_transport_id_len(struct se_portal_group *, struct se_node_acl *,
-			struct t10_pr_registration *, int *);
-extern char *tcm_qla2xxx_parse_pr_out_transport_id(struct se_portal_group *, const char *,
-				u32 *, char **);
+extern u32 tcm_qla2xxx_get_pr_transport_id(struct se_portal_group *,
+			struct se_node_acl *, struct t10_pr_registration *,
+			int *, unsigned char *);
+extern u32 tcm_qla2xxx_get_pr_transport_id_len(struct se_portal_group *,
+			struct se_node_acl *, struct t10_pr_registration *,
+			int *);
+extern char *tcm_qla2xxx_parse_pr_out_transport_id(struct se_portal_group *,
+			const char *, u32 *, char **);
 extern int tcm_qla2xxx_check_demo_mode(struct se_portal_group *);
 extern int tcm_qla2xxx_check_demo_mode_cache(struct se_portal_group *);
 extern int tcm_qla2xxx_check_demo_write_protect(struct se_portal_group *);
 extern int tcm_qla2xxx_check_prod_write_protect(struct se_portal_group *);
-extern struct se_node_acl *tcm_qla2xxx_alloc_fabric_acl(struct se_portal_group *);
-extern void tcm_qla2xxx_release_fabric_acl(struct se_portal_group *, struct se_node_acl *);
+extern struct se_node_acl *tcm_qla2xxx_alloc_fabric_acl(
+			struct se_portal_group *);
+extern void tcm_qla2xxx_release_fabric_acl(struct se_portal_group *,
+			struct se_node_acl *);
 extern u32 tcm_qla2xxx_tpg_get_inst_index(struct se_portal_group *);
 extern void tcm_qla2xxx_free_cmd(struct qla_tgt_cmd *);
 extern int tcm_qla2xxx_check_stop_free(struct se_cmd *);

@@ -385,8 +385,7 @@ static int qlt_reset(struct scsi_qla_host *vha, void *iocb, int mcmd)
 
 	loop_id = le16_to_cpu(n->u.isp24.nport_handle);
 	if (loop_id == 0xFFFF) {
-/* FIXME: Re-enable Global event handling.. */
-#if 0
+#if 0 /* FIXME: Re-enable Global event handling.. */
 		/* Global event */
 		atomic_inc(&ha->tgt.qla_tgt->tgt_global_resets_count);
 		qlt_clear_tgt_db(ha->tgt.qla_tgt, 1);
@@ -1051,7 +1050,7 @@ static int qlt_sched_sess_work(struct qla_tgt *tgt, int type,
 	unsigned long flags;
 
 	prm = kzalloc(sizeof(*prm), GFP_ATOMIC);
-	if (!prm ) {
+	if (!prm) {
 		ql_dbg(ql_dbg_tgt_mgt, tgt->vha, 0xf050,
 		    "qla_target(%d): Unable to create session "
 		    "work, command will be refused", 0);
@@ -1954,7 +1953,7 @@ static inline void qlt_check_srr_debug(struct qla_tgt_cmd *cmd, int *xmit_type)
 static void qlt_24xx_init_ctio_to_isp(ctio7_to_24xx_t *ctio,
 	struct qla_tgt_prm *prm)
 {
-	prm->sense_buffer_len = min((uint32_t)prm->sense_buffer_len,
+	prm->sense_buffer_len = min_t(uint32_t, prm->sense_buffer_len,
 	    (uint32_t)sizeof(ctio->u.status1.sense_data));
 	ctio->u.status0.flags |=
 	    __constant_cpu_to_le16(CTIO7_FLAGS_SEND_STATUS);
@@ -2051,7 +2050,7 @@ int qlt_xmit_response(struct qla_tgt_cmd *cmd, int xmit_type,
 
 	spin_lock_irqsave(&ha->hardware_lock, flags);
 
-        /* Does F/W have an IOCBs for this request */
+	/* Does F/W have an IOCBs for this request */
 	res = qlt_check_reserve_free_req(vha, full_req_cnt);
 	if (unlikely(res))
 		goto out_unmap_unlock;
@@ -2306,7 +2305,7 @@ static int qlt_prepare_srr_ctio(struct scsi_qla_host *vha,
 		ql_dbg(ql_dbg_tgt_mgt, vha, 0xf055,
 		    "qla_target(%d): SRR CTIO, but ctio is NULL\n",
 		    vha->vp_idx);
-		return EINVAL;
+		return -EINVAL;
 	}
 
 	sc = kzalloc(sizeof(*sc), GFP_ATOMIC);
@@ -2595,28 +2594,28 @@ static inline int qlt_get_fcp_task_attr(struct scsi_qla_host *vha,
 	int fcp_task_attr;
 
 	switch (task_codes) {
-        case ATIO_SIMPLE_QUEUE:
-                fcp_task_attr = MSG_SIMPLE_TAG;
-                break;
-        case ATIO_HEAD_OF_QUEUE:
-                fcp_task_attr = MSG_HEAD_TAG;
-                break;
-        case ATIO_ORDERED_QUEUE:
-                fcp_task_attr = MSG_ORDERED_TAG;
-                break;
-        case ATIO_ACA_QUEUE:
+	case ATIO_SIMPLE_QUEUE:
+		fcp_task_attr = MSG_SIMPLE_TAG;
+		break;
+	case ATIO_HEAD_OF_QUEUE:
+		fcp_task_attr = MSG_HEAD_TAG;
+		break;
+	case ATIO_ORDERED_QUEUE:
+		fcp_task_attr = MSG_ORDERED_TAG;
+		break;
+	case ATIO_ACA_QUEUE:
 		fcp_task_attr = MSG_ACA_TAG;
 		break;
-        case ATIO_UNTAGGED:
-                fcp_task_attr = MSG_SIMPLE_TAG;
-                break;
-        default:
+	case ATIO_UNTAGGED:
+		fcp_task_attr = MSG_SIMPLE_TAG;
+		break;
+	default:
 		ql_dbg(ql_dbg_tgt_mgt, vha, 0xf05d,
 		    "qla_target: unknown task code %x, use ORDERED instead\n",
 		    task_codes);
-                fcp_task_attr = MSG_ORDERED_TAG;
-                break;
-        }
+		fcp_task_attr = MSG_ORDERED_TAG;
+		break;
+	}
 
 	return fcp_task_attr;
 }
@@ -2637,7 +2636,7 @@ static void qlt_do_work(struct work_struct *work)
 	unsigned char *cdb;
 	unsigned long flags;
 	uint32_t data_length;
-	int ret, fcp_task_attr, data_dir, bidi = 0;;
+	int ret, fcp_task_attr, data_dir, bidi = 0;
 
 	if (tgt->tgt_stop)
 		goto out_term;
@@ -3082,7 +3081,7 @@ static int qlt_set_data_offset(struct qla_tgt_cmd *cmd, uint32_t offset)
 	 * Walk the remaining list for sg_srr_start, mapping to the newly
 	 * allocated sg_srr taking first_offset into account.
 	 */
-	for_each_sg(sg_srr_start, sg, sg_srr_cnt, i) { 
+	for_each_sg(sg_srr_start, sg, sg_srr_cnt, i) {
 		if (first_offset) {
 			sg_set_page(sgp, sg_page(sg),
 			    (sg->length - first_offset), first_offset);
@@ -3247,9 +3246,8 @@ static void qlt_handle_srr(struct scsi_qla_host *vha,
 	}
 
 	/* Transmit response in case of status and data-in cases */
-	if (resp) {
+	if (resp)
 		qlt_xmit_response(cmd, xmit_type, se_cmd->scsi_status);
-	}
 
 	return;
 
@@ -4082,7 +4080,7 @@ static fc_port_t *qlt_get_port_database(struct scsi_qla_host *vha,
 		    "(loop_id=0x%04x)", vha->vp_idx, rc, loop_id);
 		kfree(fcport);
 		return NULL;
-        }
+	}
 
 	return fcport;
 }
@@ -4341,11 +4339,12 @@ int qlt_add_target(struct qla_hw_data *ha, struct scsi_qla_host *base_vha)
 	INIT_LIST_HEAD(&tgt->srr_imm_list);
 	INIT_WORK(&tgt->srr_work, qlt_handle_srr_work);
 	atomic_set(&tgt->tgt_global_resets_count, 0);
-	
+
 	ha->tgt.qla_tgt = tgt;
 
 	ql_dbg(ql_dbg_tgt, base_vha, 0xe067,
-		"qla_target(%d): using 64 Bit PCI addressing", base_vha->vp_idx);
+		"qla_target(%d): using 64 Bit PCI addressing",
+		base_vha->vp_idx);
 	tgt->tgt_enable_64bit_addr = 1;
 	/* 3 is reserved */
 	tgt->sg_tablesize = QLA_TGT_MAX_SG_24XX(base_vha->req->length - 3);
@@ -4406,8 +4405,7 @@ static void qlt_lport_dump(struct scsi_qla_host *vha, u64 wwpn,
  * @target_lport_ptr: pointer for tcm_qla2xxx specific lport data
  */
 int qlt_lport_register(struct qla_tgt_func_tmpl *qla_tgt_ops, u64 wwpn,
-                       int (*callback)(struct scsi_qla_host *),
-                       void *target_lport_ptr)
+	int (*callback)(struct scsi_qla_host *), void *target_lport_ptr)
 {
 	struct qla_tgt *tgt;
 	struct scsi_qla_host *vha;
@@ -4615,9 +4613,9 @@ qlt_vport_create(struct scsi_qla_host *vha, struct qla_hw_data *ha)
 
 	/*
 	 * NOTE: Currently the value is kept the same for <24xx and
-	 * 	 >=24xx ISPs. If it is necessary to change it,
-	 *	 the check should be added for specific ISPs,
-	 *	 assigning the value appropriately.
+	 * >=24xx ISPs. If it is necessary to change it,
+	 * the check should be added for specific ISPs,
+	 * assigning the value appropriately.
 	 */
 	ha->tgt.atio_q_length = ATIO_ENTRY_CNT_24XX;
 }
@@ -4711,9 +4709,9 @@ qlt_24xx_config_rings(struct scsi_qla_host *vha, device_reg_t __iomem *reg)
 /* FIXME: atio_q in/out for ha->mqenable=1..? */
 	if (ha->mqenable) {
 #if 0
-                WRT_REG_DWORD(&reg->isp25mq.atio_q_in, 0);
-                WRT_REG_DWORD(&reg->isp25mq.atio_q_out, 0);
-                RD_REG_DWORD(&reg->isp25mq.atio_q_out);
+		WRT_REG_DWORD(&reg->isp25mq.atio_q_in, 0);
+		WRT_REG_DWORD(&reg->isp25mq.atio_q_out, 0);
+		RD_REG_DWORD(&reg->isp25mq.atio_q_out);
 #endif
 	} else {
 		/* Setup APTIO registers for target mode */

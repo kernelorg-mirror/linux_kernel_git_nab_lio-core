@@ -61,7 +61,7 @@
  */
 #define CTIO_COMPLETION_HANDLE_MARK	BIT_29
 #if (CTIO_COMPLETION_HANDLE_MARK <= MAX_OUTSTANDING_COMMANDS)
-#error "Hackish CTIO_COMPLETION_HANDLE_MARK no longer larger than MAX_OUTSTANDING_COMMANDS"
+#error "CTIO_COMPLETION_HANDLE_MARK not larger than MAX_OUTSTANDING_COMMANDS"
 #endif
 #define HANDLE_IS_CTIO_COMP(h) (h & CTIO_COMPLETION_HANDLE_MARK)
 
@@ -94,25 +94,28 @@
 #define QLA_TGT_DATASEGS_PER_CMD32	3
 #define QLA_TGT_DATASEGS_PER_CONT32	7
 #define QLA_TGT_MAX_SG32(ql) \
-   (((ql) > 0) ? (QLA_TGT_DATASEGS_PER_CMD32 + QLA_TGT_DATASEGS_PER_CONT32*((ql) - 1)) : 0)
+	(((ql) > 0) ? (QLA_TGT_DATASEGS_PER_CMD32 + \
+		QLA_TGT_DATASEGS_PER_CONT32*((ql) - 1)) : 0)
 
 #define QLA_TGT_DATASEGS_PER_CMD64	2
 #define QLA_TGT_DATASEGS_PER_CONT64	5
 #define QLA_TGT_MAX_SG64(ql) \
-   (((ql) > 0) ? (QLA_TGT_DATASEGS_PER_CMD64 + QLA_TGT_DATASEGS_PER_CONT64*((ql) - 1)) : 0)
+	(((ql) > 0) ? (QLA_TGT_DATASEGS_PER_CMD64 + \
+		QLA_TGT_DATASEGS_PER_CONT64*((ql) - 1)) : 0)
 #endif
 
 #ifndef QLA_TGT_DATASEGS_PER_CMD_24XX
 #define QLA_TGT_DATASEGS_PER_CMD_24XX	1
 #define QLA_TGT_DATASEGS_PER_CONT_24XX	5
 #define QLA_TGT_MAX_SG_24XX(ql) \
-   (min(1270, ((ql) > 0) ? (QLA_TGT_DATASEGS_PER_CMD_24XX + QLA_TGT_DATASEGS_PER_CONT_24XX*((ql) - 1)) : 0))
+	(min(1270, ((ql) > 0) ? (QLA_TGT_DATASEGS_PER_CMD_24XX + \
+		QLA_TGT_DATASEGS_PER_CONT_24XX*((ql) - 1)) : 0))
 #endif
 #endif
 
-#define GET_TARGET_ID(ha, iocb) ((HAS_EXTENDED_IDS(ha))				\
-				 ? le16_to_cpu((iocb)->u.isp2x.target.extended)	\
-				 : (uint16_t)(iocb)->u.isp2x.target.id.standard)
+#define GET_TARGET_ID(ha, iocb) ((HAS_EXTENDED_IDS(ha))			\
+			 ? le16_to_cpu((iocb)->u.isp2x.target.extended)	\
+			 : (uint16_t)(iocb)->u.isp2x.target.id.standard)
 
 #ifndef IMMED_NOTIFY_TYPE
 #define IMMED_NOTIFY_TYPE 0x0D		/* Immediate notify entry. */
@@ -172,7 +175,7 @@ typedef struct {
 	} u;
 	uint16_t reserved_7;
 	uint16_t ox_id;
-} __attribute__((packed)) imm_ntfy_from_isp_t;
+} __packed imm_ntfy_from_isp_t;
 #endif
 
 #ifndef NOTIFY_ACK_TYPE
@@ -229,7 +232,7 @@ typedef struct {
 	} u;
 	uint8_t  reserved[2];
 	uint16_t ox_id;
-} __attribute__((packed)) nack_to_isp_t;
+} __packed nack_to_isp_t;
 #define NOTIFY_ACK_SRR_FLAGS_ACCEPT	0
 #define NOTIFY_ACK_SRR_FLAGS_REJECT	1
 
@@ -252,29 +255,29 @@ typedef struct {
  *		This structure is sent to the ISP 2xxx from target driver.
  */
 typedef struct {
-	uint8_t	 entry_type;		    /* Entry type. */
-	uint8_t	 entry_count;		    /* Entry count. */
-	uint8_t	 sys_define;		    /* System defined. */
-	uint8_t	 entry_status;		    /* Entry Status. */
-	uint32_t handle;		    /* System defined handle */
+	uint8_t	 entry_type;		/* Entry type. */
+	uint8_t	 entry_count;		/* Entry count. */
+	uint8_t	 sys_define;		/* System defined. */
+	uint8_t	 entry_status;		/* Entry Status. */
+	uint32_t handle;		/* System defined handle */
 	target_id_t target;
 	uint16_t rx_id;
 	uint16_t flags;
 	uint16_t status;
-	uint16_t timeout;		    /* 0 = 30 seconds, 0xFFFF = disable */
-	uint16_t dseg_count;		    /* Data segment count. */
+	uint16_t timeout;		/* 0 = 30 seconds, 0xFFFF = disable */
+	uint16_t dseg_count;		/* Data segment count. */
 	uint32_t relative_offset;
 	uint32_t residual;
 	uint16_t reserved_1[3];
 	uint16_t scsi_status;
 	uint32_t transfer_length;
-	uint32_t dseg_0_address;	    /* Data segment 0 address. */
-	uint32_t dseg_0_length;		    /* Data segment 0 length. */
-	uint32_t dseg_1_address;	    /* Data segment 1 address. */
-	uint32_t dseg_1_length;		    /* Data segment 1 length. */
-	uint32_t dseg_2_address;	    /* Data segment 2 address. */
-	uint32_t dseg_2_length;		    /* Data segment 2 length. */
-} __attribute__((packed)) ctio_to_2xxx_t;
+	uint32_t dseg_0_address;	/* Data segment 0 address. */
+	uint32_t dseg_0_length;		/* Data segment 0 length. */
+	uint32_t dseg_1_address;	/* Data segment 1 address. */
+	uint32_t dseg_1_length;		/* Data segment 1 length. */
+	uint32_t dseg_2_address;	/* Data segment 2 address. */
+	uint32_t dseg_2_length;		/* Data segment 2 length. */
+} __packed ctio_to_2xxx_t;
 #define ATIO_PATH_INVALID       0x07
 #define ATIO_CANT_PROV_CAP      0x16
 #define ATIO_CDB_VALID          0x3D
@@ -314,7 +317,7 @@ typedef struct {
 	uint16_t ox_id;
 	uint16_t rx_id;
 	uint32_t parameter;
-} __attribute__((packed)) fcp_hdr_t;
+} __packed fcp_hdr_t;
 
 typedef struct {
 	uint8_t  d_id[3];
@@ -329,7 +332,7 @@ typedef struct {
 	uint16_t rx_id;
 	uint16_t ox_id;
 	uint32_t parameter;
-} __attribute__((packed)) fcp_hdr_le_t;
+} __packed fcp_hdr_le_t;
 
 #define F_CTL_EXCH_CONTEXT_RESP	BIT_23
 #define F_CTL_SEQ_CONTEXT_RESIP	BIT_22
@@ -357,13 +360,13 @@ typedef struct {
 	uint8_t  add_cdb_len:6;
 	uint8_t  cdb[16];
 	/*
-	 * add_cdb is optional and can absent from atio7_fcp_cmnd_t. Size 4 only to
-	 * make sizeof(atio7_fcp_cmnd_t) be as expected by BUILD_BUG_ON() in
-	 * qlt_init().
+	 * add_cdb is optional and can absent from atio7_fcp_cmnd_t. Size 4
+	 * only to make sizeof(atio7_fcp_cmnd_t) be as expected by BUILD_BUG_ON
+	 * in qlt_init().
 	 */
 	uint8_t  add_cdb[4];
 	/* uint32_t data_length; */
-} __attribute__((packed)) atio7_fcp_cmnd_t;
+} __packed atio7_fcp_cmnd_t;
 
 /*
  * ISP queue -	Accept Target I/O (ATIO) type entry IOCB structure.
@@ -409,7 +412,7 @@ typedef struct {
 #define ATIO_PROCESSED 0xDEADDEAD		/* Signature */
 		} raw;
 	} u;
-} __attribute__((packed)) atio_from_isp_t;
+} __packed atio_from_isp_t;
 
 #define CTIO_TYPE7 0x12 /* Continue target I/O entry (for 24xx) */
 
@@ -444,8 +447,10 @@ typedef struct {
 			uint32_t reserved2;
 			uint32_t transfer_length;
 			uint32_t reserved3;
-			uint32_t dseg_0_address[2]; /* Data segment 0 address. */
-			uint32_t dseg_0_length; /* Data segment 0 length. */
+			/* Data segment 0 address. */
+			uint32_t dseg_0_address[2];
+			/* Data segment 0 length. */
+			uint32_t dseg_0_length;
 		} status0;
 		struct {
 			uint16_t sense_length;
@@ -458,10 +463,11 @@ typedef struct {
 			uint8_t sense_data[24];
 		} status1;
 	} u;
-} __attribute__((packed)) ctio7_to_24xx_t;
+} __packed ctio7_to_24xx_t;
 
 /*
- * ISP queue - CTIO type 7 from ISP 24xx to target driver returned entry structure.
+ * ISP queue - CTIO type 7 from ISP 24xx to target driver
+ * returned entry structure.
  */
 typedef struct {
 	uint8_t	 entry_type;		    /* Entry type. */
@@ -482,7 +488,7 @@ typedef struct {
 	uint16_t reserved3;
 	uint32_t relative_offset;
 	uint8_t  reserved4[24];
-} __attribute__((packed)) ctio7_from_24xx_t;
+} __packed ctio7_from_24xx_t;
 
 /* CTIO7 flags values */
 #define CTIO7_FLAGS_SEND_STATUS		BIT_15
@@ -533,7 +539,7 @@ typedef struct {
 	fcp_hdr_le_t fcp_hdr_le;
 	uint8_t  reserved_4[16];
 	uint32_t exchange_addr_to_abort;
-} __attribute__((packed)) abts_recv_from_24xx_t;
+} __packed abts_recv_from_24xx_t;
 
 #define ABTS_PARAM_ABORT_SEQ		BIT_0
 
@@ -547,7 +553,7 @@ typedef struct {
 	uint16_t ox_id;
 	uint16_t high_seq_cnt;
 	uint16_t low_seq_cnt;
-} __attribute__((packed)) ba_acc_le_t;
+} __packed ba_acc_le_t;
 
 typedef struct {
 	uint8_t vendor_uniq;
@@ -556,7 +562,7 @@ typedef struct {
 #define BA_RJT_REASON_CODE_INVALID_COMMAND	0x1
 #define BA_RJT_REASON_CODE_UNABLE_TO_PERFORM	0x9
 	uint8_t reserved;
-} __attribute__((packed)) ba_rjt_le_t;
+} __packed ba_rjt_le_t;
 
 /*
  * ISP queue -	ABTS Response IOCB entry structure definition for 24xx.
@@ -582,15 +588,15 @@ typedef struct {
 	union {
 		ba_acc_le_t ba_acct;
 		ba_rjt_le_t ba_rjt;
-	} __attribute__((packed)) payload;
+	} __packed payload;
 	uint32_t reserved_4;
 	uint32_t exchange_addr_to_abort;
-} __attribute__((packed)) abts_resp_to_24xx_t;
+} __packed abts_resp_to_24xx_t;
 
 /*
  * ISP queue -	ABTS Response IOCB from ISP24xx Firmware entry structure.
  *		The ABTS response with completion status to the ABTS response
- * 		(sent by the target driver to the ISP 24xx) is sent by the
+ *		(sent by the target driver to the ISP 24xx) is sent by the
  *		ISP24xx firmware to the target driver.
  *		The IOCB is placed on the response queue.
  */
@@ -615,7 +621,7 @@ typedef struct {
 #define ABTS_RESP_SUBCODE_ERR_ABORTED_EXCH_NOT_TERM	0x1E
 	uint32_t error_subcode2;
 	uint32_t exchange_addr_to_abort;
-} __attribute__((packed)) abts_resp_from_24xx_fw_t;
+} __packed abts_resp_from_24xx_fw_t;
 
 /********************************************************************\
  * Type Definitions used by initiator & target halves
@@ -634,7 +640,8 @@ struct qla_tgt_func_tmpl {
 	int (*handle_cmd)(struct scsi_qla_host *, struct qla_tgt_cmd *,
 			unsigned char *, uint32_t, int, int, int);
 	int (*handle_data)(struct qla_tgt_cmd *);
-	int (*handle_tmr)(struct qla_tgt_mgmt_cmd *, uint32_t, uint8_t, uint32_t);
+	int (*handle_tmr)(struct qla_tgt_mgmt_cmd *, uint32_t, uint8_t,
+			uint32_t);
 	void (*free_cmd)(struct qla_tgt_cmd *);
 	void (*free_mcmd)(struct qla_tgt_mgmt_cmd *);
 	void (*free_session)(struct qla_tgt_sess *);
@@ -691,15 +698,15 @@ int qla2x00_wait_for_hba_online(struct scsi_qla_host *);
 #define NOTIFY_ACK_TM_RESP_CODE_VALID BIT_4
 
 /* Command's states */
-#define QLA_TGT_STATE_NEW               0	/* New command and target processing it */
-#define QLA_TGT_STATE_NEED_DATA         1	/* target needs data to continue */
-#define QLA_TGT_STATE_DATA_IN           2	/* Data arrived and target is processing */
-#define QLA_TGT_STATE_PROCESSED         3	/* target done processing */
-#define QLA_TGT_STATE_ABORTED           4	/* Command aborted */
+#define QLA_TGT_STATE_NEW		0 /* New command + target processing */
+#define QLA_TGT_STATE_NEED_DATA		1 /* target needs data to continue */
+#define QLA_TGT_STATE_DATA_IN		2 /* Data arrived + target processing */
+#define QLA_TGT_STATE_PROCESSED		3 /* target done processing */
+#define QLA_TGT_STATE_ABORTED		4 /* Command aborted */
 
 /* Special handles */
-#define QLA_TGT_NULL_HANDLE             0
-#define QLA_TGT_SKIP_HANDLE             (0xFFFFFFFF & ~CTIO_COMPLETION_HANDLE_MARK)
+#define QLA_TGT_NULL_HANDLE	0
+#define QLA_TGT_SKIP_HANDLE	(0xFFFFFFFF & ~CTIO_COMPLETION_HANDLE_MARK)
 
 /* ATIO task_codes field */
 #define ATIO_SIMPLE_QUEUE           0
@@ -754,7 +761,7 @@ struct qla_tgt {
 	int datasegs_per_cmd, datasegs_per_cont, sg_tablesize;
 
 	/* Target's flags, serialized by pha->hardware_lock */
-	unsigned int tgt_enable_64bit_addr:1;	/* 64-bits PCI addressing enabled */
+	unsigned int tgt_enable_64bit_addr:1; /* 64-bits PCI addr enabled */
 	unsigned int link_reinit_iocb_pending:1;
 	unsigned int tm_to_unknown:1; /* TM to unknown session was sent */
 	unsigned int sess_works_pending:1; /* there are sess_work entries */
@@ -817,7 +824,7 @@ struct qla_tgt_sess {
 	struct list_head sess_list_entry;
 	unsigned long expires;
 	struct list_head del_list_entry;
-	
+
 	uint8_t port_name[WWN_SIZE];
 	struct work_struct free_work;
 };
@@ -831,7 +838,8 @@ struct qla_tgt_cmd {
 	/* Sense buffer that will be mapped into outgoing status */
 	unsigned char sense_buffer[TRANSPORT_SENSE_BUFFER];
 
-	unsigned int conf_compl_supported:1;/* to save extra sess dereferences */
+	/* to save extra sess dereferences */
+	unsigned int conf_compl_supported:1;
 	unsigned int sg_mapped:1;
 	unsigned int free_sg:1;
 	unsigned int aborted:1; /* Needed in case of SRR */
@@ -845,8 +853,8 @@ struct qla_tgt_cmd {
 	uint32_t unpacked_lun;
 	enum dma_data_direction dma_data_direction;
 
-	uint16_t loop_id;		    /* to save extra sess dereferences */
-	struct qla_tgt *tgt;		    /* to save extra sess dereferences */
+	uint16_t loop_id;	/* to save extra sess dereferences */
+	struct qla_tgt *tgt;	/* to save extra sess dereferences */
 	struct scsi_qla_host *vha;
 	struct list_head cmd_list;
 
@@ -879,7 +887,7 @@ struct qla_tgt_mgmt_cmd {
 		atio_from_isp_t atio;
 		imm_ntfy_from_isp_t imm_ntfy;
 		abts_recv_from_24xx_t abts;
-	} __attribute__((packed)) orig_iocb;
+	} __packed orig_iocb;
 };
 
 struct qla_tgt_prm {
