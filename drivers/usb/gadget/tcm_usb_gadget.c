@@ -30,7 +30,7 @@
 #include "config.c"
 #include "composite.c"
 
-#include "usb_gadget.h"
+#include "tcm_usb_gadget.h"
 
 static struct target_fabric_configfs *usbg_fabric_configfs;
 
