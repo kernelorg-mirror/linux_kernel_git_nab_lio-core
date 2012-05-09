@@ -757,9 +757,6 @@ static u16 tcm_qla2xxx_set_fabric_sense_len(struct se_cmd *se_cmd, u32 sense_len
 struct target_fabric_configfs *tcm_qla2xxx_fabric_configfs;
 struct target_fabric_configfs *tcm_qla2xxx_npiv_fabric_configfs;
 
-struct workqueue_struct *tcm_qla2xxx_free_wq;
-struct workqueue_struct *tcm_qla2xxx_cmd_wq;
-
 static int tcm_qla2xxx_setup_nacl_from_rport(
 	struct se_portal_group *se_tpg,
 	struct se_node_acl *se_nacl,
