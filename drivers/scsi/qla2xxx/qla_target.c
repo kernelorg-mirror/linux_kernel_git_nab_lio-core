@@ -3041,7 +3041,7 @@ static int qlt_set_data_offset(struct qla_tgt_cmd *cmd, uint32_t offset)
 			sg_srr_start = sg;
 			ql_dbg(ql_dbg_tgt, cmd->vha, 0xe025,
 			    "Found matching sg[%d], using %p as sg_srr_start, "
-			    "and using first_offset: %lu\n", i, sg,
+			    "and using first_offset: %zu\n", i, sg,
 			    first_offset);
 			break;
 		}
