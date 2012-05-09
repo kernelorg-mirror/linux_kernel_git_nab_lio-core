@@ -421,7 +421,6 @@ static int qlt_reset(struct scsi_qla_host *vha, void *iocb, int mcmd)
 	    "Using sess for qla_tgt_reset: %p\n", sess);
 	if (!sess) {
 		res = -ESRCH;
-		ha->tgt.qla_tgt->tm_to_unknown = 1;
 		return res;
 	}
 
@@ -1066,10 +1065,7 @@ static int qlt_sched_sess_work(struct qla_tgt *tgt, int type,
 	memcpy(&prm->tm_iocb, param, param_size);
 
 	spin_lock_irqsave(&tgt->sess_work_lock, flags);
-	if (!tgt->sess_works_pending)
-		tgt->tm_to_unknown = 0;
 	list_add_tail(&prm->sess_works_list_entry, &tgt->sess_works_list);
-	tgt->sess_works_pending = 1;
 	spin_unlock_irqrestore(&tgt->sess_work_lock, flags);
 
 	schedule_work(&tgt->sess_work);
@@ -1343,7 +1339,6 @@ static void qlt_24xx_handle_abts(struct scsi_qla_host *vha,
 		rc = qlt_sched_sess_work(ha->tgt.qla_tgt,
 		    QLA_TGT_SESS_WORK_ABORT, abts, sizeof(*abts));
 		if (rc != 0) {
-			ha->tgt.qla_tgt->tm_to_unknown = 1;
 			qlt_24xx_send_abts_resp(vha, abts, FCP_TMF_REJECTED,
 			    false);
 		}
@@ -2880,7 +2875,7 @@ static int qlt_handle_task_mgmt(struct scsi_qla_host *vha, void *iocb)
 	struct qla_tgt *tgt;
 	struct qla_tgt_sess *sess;
 	uint32_t lun, unpacked_lun;
-	int lun_size, fn, res = 0;
+	int lun_size, fn; 
 
 	tgt = ha->tgt.qla_tgt;
 
@@ -2895,12 +2890,8 @@ static int qlt_handle_task_mgmt(struct scsi_qla_host *vha, void *iocb)
 		ql_dbg(ql_dbg_tgt_mgt, vha, 0xf024,
 		    "qla_target(%d): task mgmt fn 0x%x for "
 		    "non-existant session\n", vha->vp_idx, fn);
-		res = qlt_sched_sess_work(tgt, QLA_TGT_SESS_WORK_TM, iocb,
+		return qlt_sched_sess_work(tgt, QLA_TGT_SESS_WORK_TM, iocb,
 		    sizeof(atio_from_isp_t));
-		if (res != 0)
-			tgt->tm_to_unknown = 1;
-
-		return res;
 	}
 
 	return qlt_issue_task_mgmt(sess, unpacked_lun, fn, iocb, 0);
@@ -2950,7 +2941,7 @@ static int qlt_abort_task(struct scsi_qla_host *vha, imm_ntfy_from_isp_t *iocb)
 {
 	struct qla_hw_data *ha = vha->hw;
 	struct qla_tgt_sess *sess;
-	int loop_id, res;
+	int loop_id;
 
 	loop_id = GET_TARGET_ID(ha, (atio_from_isp_t *)iocb);
 
@@ -2959,12 +2950,8 @@ static int qlt_abort_task(struct scsi_qla_host *vha, imm_ntfy_from_isp_t *iocb)
 		ql_dbg(ql_dbg_tgt_mgt, vha, 0xf025,
 		    "qla_target(%d): task abort for unexisting "
 		    "session\n", vha->vp_idx);
-		res = qlt_sched_sess_work(ha->tgt.qla_tgt,
+		return qlt_sched_sess_work(ha->tgt.qla_tgt,
 		    QLA_TGT_SESS_WORK_ABORT, iocb, sizeof(*iocb));
-		if (res != 0)
-			sess->tgt->tm_to_unknown = 1;
-
-		return res;
 	}
 
 	return __qlt_abort_task(vha, iocb, sess);
@@ -4254,7 +4241,6 @@ static void qlt_sess_work_fn(struct work_struct *work)
 {
 	struct qla_tgt *tgt = container_of(work, struct qla_tgt, sess_work);
 	struct scsi_qla_host *vha = tgt->vha;
-	struct qla_hw_data *ha = vha->hw;
 	unsigned long flags;
 
 	ql_dbg(ql_dbg_tgt_mgt, vha, 0xf000, "Sess work (tgt %p)", tgt);
@@ -4290,15 +4276,6 @@ static void qlt_sess_work_fn(struct work_struct *work)
 		kfree(prm);
 	}
 	spin_unlock_irqrestore(&tgt->sess_work_lock, flags);
-
-	spin_lock_irqsave(&ha->hardware_lock, flags);
-	spin_lock(&tgt->sess_work_lock);
-	if (list_empty(&tgt->sess_works_list)) {
-		tgt->sess_works_pending = 0;
-		tgt->tm_to_unknown = 0;
-	}
-	spin_unlock(&tgt->sess_work_lock);
-	spin_unlock_irqrestore(&ha->hardware_lock, flags);
 }
 
 /* Must be called under tgt_host_action_mutex */
