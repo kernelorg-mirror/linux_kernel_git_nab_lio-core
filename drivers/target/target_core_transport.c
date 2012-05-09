@@ -2981,12 +2981,11 @@ static int transport_generic_cmd_sequencer(
 				su_dev->se_dev_attrib.fabric_max_sectors);
 			goto out_invalid_cdb_field;
 		}
-		if (passthrough &&
-		    sectors > su_dev->se_dev_attrib.max_sectors) {
+		if (sectors > su_dev->se_dev_attrib.hw_max_sectors) {
 			printk_ratelimited(KERN_ERR "SCSI OP %02xh with too"
-				" big sectors %u exceeds backend max_sectors:"
+				" big sectors %u exceeds backend hw_max_sectors:"
 				" %u\n", cdb[0], sectors,
-				su_dev->se_dev_attrib.max_sectors);
+				su_dev->se_dev_attrib.hw_max_sectors);
 			goto out_invalid_cdb_field;
 		}
 	}
