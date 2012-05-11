@@ -719,7 +719,8 @@ static struct qla_tgt_sess *qlt_create_sess(
 
 	/* Check to avoid double sessions */
 	spin_lock_irqsave(&ha->hardware_lock, flags);
-	list_for_each_entry(sess, &ha->tgt.qla_tgt->sess_list, sess_list_entry) {
+	list_for_each_entry(sess, &ha->tgt.qla_tgt->sess_list,
+				sess_list_entry) {
 		if (!memcmp(sess->port_name, fcport->port_name, WWN_SIZE)) {
 			ql_dbg(ql_dbg_tgt_mgt, vha, 0xf005,
 			    "Double sess %p found (s_id %x:%x:%x, "
@@ -2645,7 +2646,10 @@ static void qlt_do_work(struct work_struct *work)
 			spin_unlock_irqrestore(&ha->hardware_lock, flags);
 			goto out_term;
 		} else {
-			/* Do the extra kref_get() before dropping qla_hw_data->hardware_lock. */
+			/*
+			 * Do the extra kref_get() before dropping
+			 * qla_hw_data->hardware_lock.
+			 */
 			kref_get(&sess->se_sess->sess_kref);
 		}
 	}
@@ -2654,14 +2658,14 @@ static void qlt_do_work(struct work_struct *work)
 	if (unlikely(!sess)) {
 		uint8_t *s_id =	atio->u.isp24.fcp_hdr.s_id;
 
-		ql_dbg(ql_dbg_tgt_mgt, vha, 0xe125, "qla_target(%d):"
-		       " Unable to find wwn login (s_id %x:%x:%x),"
-		       " trying to create it manually\n", vha->vp_idx,
-		       s_id[0], s_id[1], s_id[2]);
+		ql_dbg(ql_dbg_tgt_mgt, vha, 0xe125,
+			"qla_target(%d): Unable to find wwn login"
+			" (s_id %x:%x:%x), trying to create it manually\n",
+			vha->vp_idx, s_id[0], s_id[1], s_id[2]);
 
 		if (atio->u.raw.entry_count > 1) {
-			ql_dbg(ql_dbg_tgt_mgt, vha, 0xe127, "Dropping multy entry"
-					" cmd %p\n", cmd);
+			ql_dbg(ql_dbg_tgt_mgt, vha, 0xe127,
+				"Dropping multy entry cmd %p\n", cmd);
 			goto out_term;
 		}
 
@@ -2875,7 +2879,7 @@ static int qlt_handle_task_mgmt(struct scsi_qla_host *vha, void *iocb)
 	struct qla_tgt *tgt;
 	struct qla_tgt_sess *sess;
 	uint32_t lun, unpacked_lun;
-	int lun_size, fn; 
+	int lun_size, fn;
 
 	tgt = ha->tgt.qla_tgt;
 

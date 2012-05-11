@@ -195,7 +195,8 @@ static int tcm_qla2xxx_npiv_parse_wwn(
 	return 0;
 }
 
-static ssize_t tcm_qla2xxx_npiv_format_wwn(char *buf, size_t len, u64 wwpn, u64 wwnn)
+static ssize_t tcm_qla2xxx_npiv_format_wwn(char *buf, size_t len,
+					u64 wwpn, u64 wwnn)
 {
 	u8 b[8], b2[8];
 
@@ -359,7 +360,8 @@ static int tcm_qla2xxx_check_prod_write_protect(struct se_portal_group *se_tpg)
 	return QLA_TPG_ATTRIB(tpg)->prod_mode_write_protect;
 }
 
-static struct se_node_acl *tcm_qla2xxx_alloc_fabric_acl(struct se_portal_group *se_tpg)
+static struct se_node_acl *tcm_qla2xxx_alloc_fabric_acl(
+	struct se_portal_group *se_tpg)
 {
 	struct tcm_qla2xxx_nacl *nacl;
 
@@ -748,7 +750,8 @@ static u16 tcm_qla2xxx_get_fabric_sense_len(void)
 	return 0;
 }
 
-static u16 tcm_qla2xxx_set_fabric_sense_len(struct se_cmd *se_cmd, u32 sense_length)
+static u16 tcm_qla2xxx_set_fabric_sense_len(struct se_cmd *se_cmd,
+					u32 sense_length)
 {
 	return 0;
 }
@@ -1242,11 +1245,11 @@ static void tcm_qla2xxx_set_sess_by_s_id(
 		if (new_se_nacl) {
 			pr_debug("Setting up new fc_port entry to new_se_nacl\n");
 			nacl->nport_id = key;
-			rc = btree_insert32(&lport->lport_fcport_map, key, new_se_nacl,
-					    GFP_ATOMIC);
+			rc = btree_insert32(&lport->lport_fcport_map, key,
+					new_se_nacl, GFP_ATOMIC);
 			if (rc)
-				printk(KERN_ERR "Unable to insert s_id into fcport_map: %06x\n",
-				       (int)key);
+				printk(KERN_ERR "Unable to insert s_id into"
+					" fcport_map: %06x\n", (int)key);
 		} else {
 			pr_debug("Wiping nonexisting fc_port entry\n");
 		}
