@@ -60,7 +60,6 @@ static void core_clear_initiator_node_from_tpg(
 	int i;
 	struct se_dev_entry *deve;
 	struct se_lun *lun;
-	struct se_lun_acl *acl, *acl_tmp;
 
 	spin_lock_irq(&nacl->device_list_lock);
 	for (i = 0; i < TRANSPORT_MAX_LUNS_PER_TPG; i++) {
