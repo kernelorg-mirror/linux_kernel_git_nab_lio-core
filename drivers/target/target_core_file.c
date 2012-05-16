@@ -570,10 +570,18 @@ static u32 fd_get_device_type(struct se_device *dev)
 static sector_t fd_get_blocks(struct se_device *dev)
 {
 	struct fd_dev *fd_dev = dev->dev_ptr;
-	unsigned long long blocks_long = div_u64(fd_dev->fd_dev_size,
-			dev->se_sub_dev->se_dev_attrib.block_size);
+	struct file *f = fd_dev->fd_file;
+	struct inode *i = f->f_mapping->host;
+	/*
+	 * When using a file that references an underlying struct block_device,
+	 * ensure that fd_dev->fd_dev_size is always based on the current inode
+	 * size in order to handle underlying block_device resize operations.
+	 */
+	if (S_ISBLK(i->i_mode))
+		fd_dev->fd_dev_size = (i_size_read(i) - fd_dev->fd_block_size);
 
-	return blocks_long;
+	return div_u64(fd_dev->fd_dev_size,
+			dev->se_sub_dev->se_dev_attrib.block_size);
 }
 
 static struct se_subsystem_api fileio_template = {
